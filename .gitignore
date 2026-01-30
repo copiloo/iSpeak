@@ -38,7 +38,7 @@ env/
 .LSOverride
 
 # Whisper models (large files - downloaded automatically)
-voicedev/models/
+ispeak/models/
 
 # PyInstaller
 *.spec

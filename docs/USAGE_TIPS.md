@@ -1,4 +1,4 @@
-# VoiceDev Usage Tips
+# iSpeak Usage Tips
 
 ## Getting Started
 
@@ -11,7 +11,7 @@ source venv/bin/activate
 python prototype.py
 ```
 
-**Wait for:** "VoiceDev Prototype Ready!"
+**Wait for:** "iSpeak Prototype Ready!"
 
 ## How to Dictate
 
@@ -177,7 +177,7 @@ print hello world
 1. System Settings > Privacy & Security > Accessibility
 2. Find Terminal or Python
 3. Enable the checkbox
-4. Restart VoiceDev
+4. Restart iSpeak
 
 **Cause 2:** Wrong app focused
 
@@ -196,7 +196,7 @@ python -c "import pyaudio; p = pyaudio.PyAudio(); print('Mic OK')"
 **If error:**
 1. System Settings > Privacy & Security > Microphone
 2. Enable Terminal or Python
-3. Restart VoiceDev
+3. Restart iSpeak
 
 ### Poor Accuracy
 
@@ -215,7 +215,7 @@ python -c "import pyaudio; p = pyaudio.PyAudio(); print('Mic OK')"
 
 ### If Slow (>3 seconds)
 
-Edit `voicedev/transcription.py` line 23:
+Edit `ispeak/transcription.py` line 23:
 ```python
 # Change from "base" to "tiny"
 self.model = WhisperModel(
@@ -225,7 +225,7 @@ self.model = WhisperModel(
 
 ### If Inaccurate
 
-Edit `voicedev/transcription.py` line 23:
+Edit `ispeak/transcription.py` line 23:
 ```python
 # Change from "base" to "small"
 self.model = WhisperModel(
@@ -247,7 +247,7 @@ Edit `resources/vocabulary.json`:
 }
 ```
 
-Restart VoiceDev to load changes.
+Restart iSpeak to load changes.
 
 ### Keyboard Shortcuts
 
@@ -261,7 +261,7 @@ If you're still having issues:
 2. Read [SETUP_COMPLETE.md](SETUP_COMPLETE.md)
 3. Read [docs/INSTALL.md](docs/INSTALL.md)
 4. Check permissions in System Settings
-5. Restart VoiceDev
+5. Restart iSpeak
 6. Restart your Mac (if all else fails)
 
 ## Quick Reference

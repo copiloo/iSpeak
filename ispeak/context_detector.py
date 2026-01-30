@@ -1,4 +1,4 @@
-# voicedev/context_detector.py
+# ispeak/context_detector.py
 
 import os
 import sys

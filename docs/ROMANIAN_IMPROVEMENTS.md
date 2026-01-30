@@ -6,7 +6,7 @@ After user feedback that Romanian transcription accuracy was poor compared to En
 
 ## 1. ✅ Upgraded Whisper Model
 
-**File**: [voicedev/transcription.py:7](voicedev/transcription.py#L7)
+**File**: [ispeak/transcription.py:7](ispeak/transcription.py#L7)
 
 **Change**:
 ```python
@@ -26,7 +26,7 @@ def __init__(self, model_size="small", models_dir="./models"):
 
 ## 2. ✅ Enhanced Romanian Diacritics Correction
 
-**File**: [voicedev/text_processor.py:50-102](voicedev/text_processor.py#L50)
+**File**: [ispeak/text_processor.py:50-102](ispeak/text_processor.py#L50)
 
 **Added 30+ Romanian programming terms**:
 - functie → funcție
@@ -39,7 +39,7 @@ def __init__(self, model_size="small", models_dir="./models"):
 - returneaza → returnează
 - And many more...
 
-**Impact**: Even if Whisper transcribes without diacritics, VoiceDev automatically fixes common programming terms.
+**Impact**: Even if Whisper transcribes without diacritics, iSpeak automatically fixes common programming terms.
 
 ## 3. ✅ Expanded Custom Vocabulary
 
@@ -85,13 +85,13 @@ Result: Poor accuracy, mixed languages
 ```
 User speaks: "funcție pentru validare"
 Whisper hears: "functie pentru validare" (close)
-VoiceDev fixes: "funcție pentru validare" ✅
+iSpeak fixes: "funcție pentru validare" ✅
 Result: Much better accuracy with auto-correction
 ```
 
 ## First Run After Update
 
-When you first run VoiceDev after this update:
+When you first run iSpeak after this update:
 
 1. **Model download**: The "small" model will download (~500MB, 2-3 minutes)
 2. **Slower transcription**: ~2-3 seconds instead of ~1 second
@@ -111,7 +111,7 @@ When you first run VoiceDev after this update:
 
 ### Option 1: Try "medium" Model (Best Accuracy)
 
-Edit [voicedev/transcription.py:7](voicedev/transcription.py#L7):
+Edit [ispeak/transcription.py:7](ispeak/transcription.py#L7):
 ```python
 def __init__(self, model_size="medium", models_dir="./models"):
 ```
@@ -138,11 +138,11 @@ Edit [resources/vocabulary.json](resources/vocabulary.json):
 }
 ```
 
-Then restart VoiceDev.
+Then restart iSpeak.
 
 ## Understanding the Limitation
 
-**Important**: The poor Romanian accuracy compared to English is a **Whisper model limitation**, not a VoiceDev bug.
+**Important**: The poor Romanian accuracy compared to English is a **Whisper model limitation**, not a iSpeak bug.
 
 Whisper was trained on:
 - 📚 Millions of hours of English audio
@@ -183,7 +183,7 @@ Right-click menu icon → "Toggle Language (RO ⇄ EN)"
 1. **[ROMANIAN_TIPS.md](ROMANIAN_TIPS.md)** - Complete Romanian guide
 2. **[LANGUAGE_TIPS.md](LANGUAGE_TIPS.md)** - Language switching guide
 3. **[vocabulary.json](resources/vocabulary.json)** - Add your custom terms
-4. **[text_processor.py](voicedev/text_processor.py)** - Add diacritics corrections
+4. **[text_processor.py](ispeak/text_processor.py)** - Add diacritics corrections
 
 ## Testing the Improvements
 

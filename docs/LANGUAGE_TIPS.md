@@ -2,7 +2,7 @@
 
 ## Understanding Language Settings
 
-VoiceDev has a **language preference** that you set, but Whisper may still **detect** a different language based on what it hears.
+iSpeak has a **language preference** that you set, but Whisper may still **detect** a different language based on what it hears.
 
 ### Default Language
 
@@ -37,7 +37,7 @@ Result: May take longer and/or give poor results
 
 ### Via Menu (Recommended)
 
-1. Right-click the VoiceDev menu bar icon
+1. Right-click the iSpeak menu bar icon
 2. Click "Toggle Language (RO ⇄ EN)"
 3. The menu will show the new language
 

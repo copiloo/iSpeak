@@ -1,1 +1,1 @@
-"""Test suite for VoiceDev"""
+"""Test suite for iSpeak"""

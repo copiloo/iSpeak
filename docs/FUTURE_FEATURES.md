@@ -1,6 +1,6 @@
 # Future Features & Roadmap
 
-This document tracks planned features and improvements for VoiceDev.
+This document tracks planned features and improvements for iSpeak.
 
 ## Status Legend
 - 🎯 **Planned** - Confirmed for development
@@ -440,7 +440,7 @@ This document tracks planned features and improvements for VoiceDev.
 **Priority**: Medium
 **Complexity**: High
 
-**Description**: Port VoiceDev to Windows.
+**Description**: Port iSpeak to Windows.
 
 **Changes Required**:
 - Hotkey detection (Windows API)
@@ -459,7 +459,7 @@ This document tracks planned features and improvements for VoiceDev.
 **Priority**: Low
 **Complexity**: High
 
-**Description**: Port VoiceDev to Linux.
+**Description**: Port iSpeak to Linux.
 
 **Challenges**:
 - Multiple desktop environments (GNOME, KDE, etc.)
@@ -501,7 +501,7 @@ This document tracks planned features and improvements for VoiceDev.
 **Priority**: Low
 **Complexity**: High
 
-**Description**: Run VoiceDev as a local web service.
+**Description**: Run iSpeak as a local web service.
 
 **Use Case**:
 - Use from web browsers
@@ -550,7 +550,7 @@ Features will be prioritized based on:
 1. **User Impact** - How many users benefit?
 2. **Frequency of Use** - Daily vs occasional?
 3. **Complexity** - Quick wins vs large projects?
-4. **Privacy/Offline Alignment** - Fits VoiceDev's core values?
+4. **Privacy/Offline Alignment** - Fits iSpeak's core values?
 5. **Dependencies** - Blocks other features?
 
 **Current Top 3 Priorities**:
@@ -561,6 +561,6 @@ Features will be prioritized based on:
 ---
 
 **Last Updated**: 2024-12-27
-**Maintainer**: VoiceDev Team
+**Maintainer**: iSpeak Team
 
 **Want to contribute?** Pick a feature, implement it, and submit a PR!

@@ -1,4 +1,4 @@
-# voicedev/transcription.py
+# ispeak/transcription.py
 
 from faster_whisper import WhisperModel
 import os

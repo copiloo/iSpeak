@@ -1,4 +1,4 @@
-# ✅ VoiceDev Setup Complete!
+# ✅ iSpeak Setup Complete!
 
 ## Installation Summary
 
@@ -37,7 +37,7 @@ python prototype.py
 
 **What happens:**
 1. First run downloads Whisper model (~140MB) - only happens once
-2. You'll see: "VoiceDev Prototype Ready!"
+2. You'll see: "iSpeak Prototype Ready!"
 3. Press and hold **Right Alt** key
 4. Speak in Romanian or English
 5. Release the key
@@ -53,7 +53,7 @@ Or manually:
 
 ```bash
 source venv/bin/activate
-cd voicedev
+cd ispeak
 python main.py
 ```
 
@@ -65,7 +65,7 @@ python main.py
 
 ## macOS Permissions Required
 
-When you first use VoiceDev, macOS will ask for permissions:
+When you first use iSpeak, macOS will ask for permissions:
 
 ### 1. Microphone Access ✅
 - Appears automatically
@@ -108,7 +108,7 @@ Right-click the menu bar icon > "Toggle Language (RO ⇄ EN)"
 
 ### System Tray Menu
 
-Right-click the VoiceDev icon in your menu bar to:
+Right-click the iSpeak icon in your menu bar to:
 - See current language
 - Toggle between Romanian and English
 - Access settings (coming soon)
@@ -150,7 +150,7 @@ CFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" pip install --no-
 
 - **run.sh** - Quick start script
 - **prototype.py** - Simple test version
-- **voicedev/main.py** - Full application
+- **ispeak/main.py** - Full application
 - **requirements.txt** - All dependencies
 - **IMPORTANT_PYTHON_VERSION.md** - About Python architecture issue
 

@@ -1,4 +1,4 @@
-# voicedev/hotkey_controller.py
+# ispeak/hotkey_controller.py
 
 from pynput import keyboard
 import threading

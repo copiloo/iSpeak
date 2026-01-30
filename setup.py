@@ -4,14 +4,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="voicedev",
+    name="ispeak",
     version="0.1.0",
     author="Your Name",
     author_email="your.email@example.com",
     description="Offline voice dictation for macOS developers",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/voicedev",
+    url="https://github.com/copiloo/iSpeak",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -45,11 +45,11 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "voicedev=voicedev.main:main",
+            "ispeak=ispeak.main:main",
         ],
     },
     include_package_data=True,
     package_data={
-        "voicedev": ["resources/*"],
+        "ispeak": ["resources/*"],
     },
 )

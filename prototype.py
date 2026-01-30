@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VoiceDev Weekend Prototype
+iSpeak Weekend Prototype
 Minimal implementation to test the core concept
 
 Requirements:
@@ -109,7 +109,7 @@ def main():
     p, stream = init_audio()
 
     print("\n" + "="*50)
-    print("VoiceDev Prototype Ready!")
+    print("iSpeak Prototype Ready!")
     print("="*50)
     print("Press and hold Right Alt to dictate")
     print("Speak in Romanian or English")

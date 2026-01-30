@@ -1,10 +1,10 @@
 #!/bin/bash
-# run.sh - Quick script to run VoiceDev
+# run.sh - Quick script to run iSpeak
 
 set -e  # Exit on error
 
 echo "================================================"
-echo "Starting VoiceDev"
+echo "Starting iSpeak"
 echo "================================================"
 
 # Check if virtual environment exists
@@ -33,5 +33,5 @@ fi
 # Run the application
 echo "Starting application..."
 echo ""
-cd voicedev
+cd ispeak
 python main.py

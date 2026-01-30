@@ -1,4 +1,4 @@
-# VoiceDev: Technical Architecture Documentation
+# iSpeak: Technical Architecture Documentation
 
 ## Table of Contents
 1. [System Overview](#system-overview)
@@ -66,7 +66,7 @@
 
 **Implementation:**
 ```python
-# voicedev/audio_capture.py
+# ispeak/audio_capture.py
 
 import pyaudio
 import numpy as np
@@ -189,7 +189,7 @@ class AudioCapture {
 
 **Implementation:**
 ```python
-# voicedev/transcription.py
+# ispeak/transcription.py
 
 from faster_whisper import WhisperModel
 import os
@@ -290,7 +290,7 @@ class TranscriptionEngine:
 
 **Implementation:**
 ```python
-# voicedev/text_processor.py
+# ispeak/text_processor.py
 
 import re
 from typing import Dict, List
@@ -476,7 +476,7 @@ class TextProcessor:
 
 **Implementation:**
 ```python
-# voicedev/text_injector.py
+# ispeak/text_injector.py
 
 from pynput.keyboard import Controller, Key
 import time
@@ -625,7 +625,7 @@ class TextInjector {
 
 **Implementation:**
 ```python
-# voicedev/hotkey_controller.py
+# ispeak/hotkey_controller.py
 
 from pynput import keyboard
 import threading
@@ -714,7 +714,7 @@ class HotkeyController:
 
 **Implementation:**
 ```python
-# voicedev/context_detector.py
+# ispeak/context_detector.py
 
 import os
 import sys
@@ -814,7 +814,7 @@ You could use macOS Accessibility API to get the actual file name from window ti
 
 **Putting it all together:**
 ```python
-# voicedev/main.py
+# ispeak/main.py
 
 import sys
 import os
@@ -832,10 +832,10 @@ from hotkey_controller import HotkeyController
 from context_detector import ContextDetector
 
 
-class VoiceDevApp:
+class iSpeakApp:
     def __init__(self):
         # Initialize components
-        print("Initializing VoiceDev...")
+        print("Initializing iSpeak...")
         
         self.audio = AudioCapture()
         self.transcriber = TranscriptionEngine(model_size="base")
@@ -857,7 +857,7 @@ class VoiceDevApp:
         
         self.tray_icon = self._create_tray_icon()
         
-        print("VoiceDev initialized!")
+        print("iSpeak initialized!")
     
     def start_dictation(self):
         """Called when hotkey pressed"""
@@ -935,7 +935,7 @@ class VoiceDevApp:
             painter.end()
             icon.setIcon(QIcon(pixmap))
         
-        icon.setToolTip("VoiceDev - Ready")
+        icon.setToolTip("iSpeak - Ready")
         
         # Create menu
         self._update_tray_menu()
@@ -964,7 +964,7 @@ class VoiceDevApp:
         menu.addSeparator()
         
         # About
-        about_action = menu.addAction("About VoiceDev")
+        about_action = menu.addAction("About iSpeak")
         about_action.triggered.connect(self._show_about)
         
         # Quit
@@ -987,8 +987,8 @@ class VoiceDevApp:
         from PyQt6.QtWidgets import QMessageBox
         
         msg = QMessageBox()
-        msg.setWindowTitle("About VoiceDev")
-        msg.setText("VoiceDev v0.1.0\n\n"
+        msg.setWindowTitle("About iSpeak")
+        msg.setText("iSpeak v0.1.0\n\n"
                    "Offline voice dictation for developers\n\n"
                    "Press Right Alt to start dictating.\n"
                    f"Current language: {self.current_language.upper()}\n\n"
@@ -998,7 +998,7 @@ class VoiceDevApp:
     def run(self):
         """Start the application"""
         print("\n" + "="*60)
-        print("🚀 VoiceDev Started!")
+        print("🚀 iSpeak Started!")
         print("="*60)
         print(f"   Hotkey: {self.hotkey.get_hotkey_name()}")
         print(f"   Language: {self.current_language.upper()}")
@@ -1015,7 +1015,7 @@ class VoiceDevApp:
     
     def quit(self):
         """Clean shutdown"""
-        print("\nShutting down VoiceDev...")
+        print("\nShutting down iSpeak...")
         
         self.hotkey.stop_listening()
         self.audio.cleanup()
@@ -1087,7 +1087,7 @@ class TranscriptionThread(QThread):
 
 def main():
     """Entry point"""
-    app = VoiceDevApp()
+    app = iSpeakApp()
     app.run()
 
 
@@ -1099,8 +1099,8 @@ if __name__ == "__main__":
 
 ## Project Structure
 ```
-voicedev/
-├── voicedev/
+ispeak/
+├── ispeak/
 │   ├── __init__.py
 │   ├── main.py                 # Main application controller
 │   ├── audio_capture.py        # Audio recording module
@@ -1291,17 +1291,17 @@ def show_permission_dialog(permission_type: str):
     messages = {
         "microphone": (
             "Microphone Access Required",
-            "VoiceDev needs microphone access to capture your voice.\n\n"
+            "iSpeak needs microphone access to capture your voice.\n\n"
             "Please go to:\n"
             "System Settings > Privacy & Security > Microphone\n"
-            "and enable VoiceDev."
+            "and enable iSpeak."
         ),
         "accessibility": (
             "Accessibility Access Required",
-            "VoiceDev needs accessibility access to type text.\n\n"
+            "iSpeak needs accessibility access to type text.\n\n"
             "Please go to:\n"
             "System Settings > Privacy & Security > Accessibility\n"
-            "and enable VoiceDev."
+            "and enable iSpeak."
         )
     }
     
@@ -1322,16 +1322,16 @@ def show_permission_dialog(permission_type: str):
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>VoiceDev</string>
+    <string>iSpeak</string>
     
     <key>CFBundleIdentifier</key>
-    <string>com.yourname.voicedev</string>
+    <string>com.yourname.ispeak</string>
     
     <key>NSMicrophoneUsageDescription</key>
-    <string>VoiceDev needs access to your microphone to capture voice input for transcription.</string>
+    <string>iSpeak needs access to your microphone to capture voice input for transcription.</string>
     
     <key>NSAccessibilityUsageDescription</key>
-    <string>VoiceDev needs accessibility access to inject text into applications.</string>
+    <string>iSpeak needs accessibility access to inject text into applications.</string>
     
     <key>LSUIElement</key>
     <true/>  <!-- Run as menu bar app, no dock icon -->
@@ -1358,7 +1358,7 @@ pip install pyinstaller
 
 # Build the app
 pyinstaller \
-    --name VoiceDev \
+    --name iSpeak \
     --windowed \
     --onefile \
     --icon resources/icon.icns \
@@ -1366,9 +1366,9 @@ pyinstaller \
     --add-data "resources:resources" \
     --hidden-import PyQt6 \
     --hidden-import faster_whisper \
-    voicedev/main.py
+    ispeak/main.py
 
-echo "✅ Build complete: dist/VoiceDev.app"
+echo "✅ Build complete: dist/iSpeak.app"
 ```
 
 **Usage:**
@@ -1377,7 +1377,7 @@ chmod +x build_app.sh
 ./build_app.sh
 ```
 
-**Output:** `dist/VoiceDev.app` (~200-300MB including models)
+**Output:** `dist/iSpeak.app` (~200-300MB including models)
 
 ### Option 2: py2app (Better macOS Integration)
 ```python
@@ -1385,7 +1385,7 @@ chmod +x build_app.sh
 
 from setuptools import setup
 
-APP = ['voicedev/main.py']
+APP = ['ispeak/main.py']
 DATA_FILES = [
     ('models', ['models/ggml-base.bin']),
     ('resources', ['resources/icon.icns', 'resources/vocabulary.json'])
@@ -1394,13 +1394,13 @@ OPTIONS = {
     'argv_emulation': False,
     'iconfile': 'resources/icon.icns',
     'plist': {
-        'CFBundleName': 'VoiceDev',
-        'CFBundleDisplayName': 'VoiceDev',
-        'CFBundleIdentifier': 'com.yourname.voicedev',
+        'CFBundleName': 'iSpeak',
+        'CFBundleDisplayName': 'iSpeak',
+        'CFBundleIdentifier': 'com.yourname.ispeak',
         'CFBundleVersion': '0.1.0',
         'CFBundleShortVersionString': '0.1.0',
-        'NSMicrophoneUsageDescription': 'VoiceDev needs microphone access for voice input.',
-        'NSAccessibilityUsageDescription': 'VoiceDev needs accessibility access to inject text.',
+        'NSMicrophoneUsageDescription': 'iSpeak needs microphone access for voice input.',
+        'NSAccessibilityUsageDescription': 'iSpeak needs accessibility access to inject text.',
         'LSUIElement': True,  # Menu bar app
     },
     'packages': ['PyQt6', 'faster_whisper', 'numpy'],
@@ -1409,7 +1409,7 @@ OPTIONS = {
 
 setup(
     app=APP,
-    name='VoiceDev',
+    name='iSpeak',
     data_files=DATA_FILES,
     options={'py2app': OPTIONS},
     setup_requires=['py2app'],
@@ -1427,8 +1427,8 @@ For final production release, create a Swift wrapper:
 
 **Structure:**
 ```
-VoiceDev/
-├── VoiceDev/                   # Swift UI
+iSpeak/
+├── iSpeak/                   # Swift UI
 │   ├── AppDelegate.swift
 │   ├── MenuBarController.swift
 │   ├── SettingsWindow.swift
@@ -1437,7 +1437,7 @@ VoiceDev/
 ├── PythonBackend/              # Your Python code
 │   └── (all the .py files)
 │
-└── VoiceDev.xcodeproj
+└── iSpeak.xcodeproj
 ```
 
 **Benefits:**
@@ -1457,8 +1457,8 @@ VoiceDev/
 
 import pytest
 import numpy as np
-from voicedev.transcription import TranscriptionEngine
-from voicedev.audio_capture import AudioCapture
+from ispeak.transcription import TranscriptionEngine
+from ispeak.audio_capture import AudioCapture
 
 @pytest.fixture
 def engine():
@@ -1500,7 +1500,7 @@ def test_empty_audio(engine):
 
 # tests/test_processor.py
 
-from voicedev.text_processor import TextProcessor
+from ispeak.text_processor import TextProcessor
 
 def test_custom_vocabulary():
     """Test vocabulary replacement"""
@@ -1534,7 +1534,7 @@ def test_code_formatting():
 
 # tests/test_audio.py
 
-from voicedev.audio_capture import AudioCapture
+from ispeak.audio_capture import AudioCapture
 import time
 
 def test_audio_capture_start_stop():
@@ -1557,14 +1557,14 @@ def test_audio_capture_start_stop():
 ```python
 # tests/test_integration.py
 
-from voicedev.main import VoiceDevApp
+from ispeak.main import iSpeakApp
 import numpy as np
 
 def test_full_pipeline():
     """Test complete transcription pipeline"""
     
     # Create app (without running event loop)
-    app = VoiceDevApp()
+    app = iSpeakApp()
     
     # Load test audio
     audio = np.load("tests/fixtures/test_speech.npy")
@@ -1720,7 +1720,7 @@ Here's a minimal 50-line prototype you can build THIS WEEKEND to validate the co
 ```python
 #!/usr/bin/env python3
 """
-VoiceDev Weekend Prototype
+iSpeak Weekend Prototype
 Minimal implementation to test the core concept
 
 Requirements:
@@ -1818,7 +1818,7 @@ def main():
     p, stream = init_audio()
     
     print("\n" + "="*50)
-    print("VoiceDev Prototype Ready!")
+    print("iSpeak Prototype Ready!")
     print("="*50)
     print("Press and hold Right Alt to dictate")
     print("Speak in Romanian or English")

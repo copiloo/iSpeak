@@ -1,4 +1,4 @@
-# voicedev/text_processor.py
+# ispeak/text_processor.py
 
 import re
 from typing import Dict, List

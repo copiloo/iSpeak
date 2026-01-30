@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get VoiceDev running in under 5 minutes!
+Get iSpeak running in under 5 minutes!
 
 ## Prerequisites Check
 
@@ -62,7 +62,7 @@ python prototype.py
 
 **First run:** The Whisper model (~140MB) will download. This only happens once.
 
-**When you see:** "VoiceDev Prototype Ready!"
+**When you see:** "iSpeak Prototype Ready!"
 1. Press and hold **Right Alt** key
 2. Speak: "acesta este un test" (Romanian) or "this is a test" (English)
 3. Release the key
@@ -79,7 +79,7 @@ If text appears, you're good to go!
 Or manually:
 
 ```bash
-cd voicedev
+cd ispeak
 python main.py
 ```
 
@@ -87,7 +87,7 @@ python main.py
 
 ### Grant Permissions (Important!)
 
-The first time you run VoiceDev, macOS will ask for permissions:
+The first time you run iSpeak, macOS will ask for permissions:
 
 1. **Microphone** - Allow (appears automatically)
 2. **Accessibility** - Go to System Settings > Privacy & Security > Accessibility
@@ -96,11 +96,11 @@ The first time you run VoiceDev, macOS will ask for permissions:
    - Enable it
 3. **Input Monitoring** - May appear automatically, click Allow
 
-Without these permissions, VoiceDev won't work!
+Without these permissions, iSpeak won't work!
 
-### Using VoiceDev
+### Using iSpeak
 
-1. Look for the VoiceDev icon in your menu bar
+1. Look for the iSpeak icon in your menu bar
 2. Open any application (TextEdit, VS Code, Terminal, etc.)
 3. Click where you want text to appear
 4. Press and hold **Right Alt**
@@ -165,7 +165,7 @@ Open a Python file and try:
 
 ### If transcription is slow
 
-Edit `voicedev/transcription.py`, line 23:
+Edit `ispeak/transcription.py`, line 23:
 ```python
 self.model = WhisperModel(
     "tiny",  # Change from "base" to "tiny"
@@ -176,7 +176,7 @@ Tiny model is 4x faster but slightly less accurate.
 
 ### If accuracy is poor
 
-Edit `voicedev/transcription.py`, line 23:
+Edit `ispeak/transcription.py`, line 23:
 ```python
 self.model = WhisperModel(
     "small",  # Change from "base" to "small"
@@ -207,7 +207,7 @@ Once everything works, create a standalone app:
 ./build_app.sh
 ```
 
-The app will be at `dist/VoiceDev.app` - double-click to run!
+The app will be at `dist/iSpeak.app` - double-click to run!
 
 ---
 

@@ -1,8 +1,8 @@
-# VoiceDev
+# iSpeak
 
 **Offline voice dictation for macOS developers**
 
-VoiceDev is a privacy-first voice-to-text application that runs 100% offline on your Mac. Perfect for developers who want to dictate code and documentation in Romanian or English without sending any data to the cloud.
+iSpeak is a privacy-first voice-to-text application that runs 100% offline on your Mac. Perfect for developers who want to dictate code and documentation in Romanian or English without sending any data to the cloud.
 
 ## Features
 
@@ -43,7 +43,7 @@ python prototype.py
 1. **Clone the repository**
    ```bash
    git clone <your-repo-url>
-   cd voiceDev
+   cd iSpeak
    ```
 
 2. **Create a virtual environment**
@@ -59,13 +59,13 @@ python prototype.py
 
 4. **Run the application**
    ```bash
-   cd voicedev
+   cd ispeak
    python main.py
    ```
 
 ## macOS Permissions
 
-VoiceDev requires the following permissions:
+iSpeak requires the following permissions:
 
 ### 1. Microphone Access
 - **Required for:** Audio capture
@@ -75,7 +75,7 @@ VoiceDev requires the following permissions:
 ### 2. Accessibility Access
 - **Required for:** System-wide text injection
 - **Location:** System Settings > Privacy & Security > Accessibility
-- You must manually enable VoiceDev or Python/Terminal
+- You must manually enable iSpeak or Python/Terminal
 
 ### 3. Input Monitoring
 - **Required for:** Global hotkey listener
@@ -86,7 +86,7 @@ VoiceDev requires the following permissions:
 
 ### Basic Operation
 
-1. **Start the app:** Run `python main.py` in the `voicedev` directory
+1. **Start the app:** Run `python main.py` in the `ispeak` directory
 2. **Activate dictation:** Press and hold **Right Alt** (or your configured hotkey)
 3. **Speak:** Say what you want to type
 4. **Release:** Let go of the hotkey
@@ -109,7 +109,7 @@ Right-click the menu bar icon to:
 
 ### Code-Aware Features
 
-When dictating in a code editor (VS Code, PyCharm, etc.), VoiceDev recognizes voice commands:
+When dictating in a code editor (VS Code, PyCharm, etc.), iSpeak recognizes voice commands:
 
 - "new line" → `\n`
 - "tab" → `\t`
@@ -132,8 +132,8 @@ Edit `resources/vocabulary.json` to add your own word replacements:
 ## Project Structure
 
 ```
-voiceDev/
-├── voicedev/               # Main application code
+iSpeak/
+├── ispeak/                # Main application code
 │   ├── main.py            # Application entry point
 │   ├── audio_capture.py   # Audio recording
 │   ├── transcription.py   # Whisper integration
@@ -173,11 +173,11 @@ voiceDev/
 
 ### Microphone not working
 - Check System Settings > Privacy & Security > Microphone
-- Make sure VoiceDev (or Python/Terminal) is enabled
+- Make sure iSpeak (or Python/Terminal) is enabled
 
 ### Text not appearing
 - Check System Settings > Privacy & Security > Accessibility
-- Enable VoiceDev (or Python/Terminal)
+- Enable iSpeak (or Python/Terminal)
 - Try the clipboard paste method (default)
 
 ### Hotkey not responding
@@ -217,7 +217,7 @@ pip install pyinstaller
 ./build_app.sh
 ```
 
-The app will be created in `dist/VoiceDev.app`.
+The app will be created in `dist/iSpeak.app`.
 
 ## Roadmap
 
@@ -249,7 +249,7 @@ The app will be created in `dist/VoiceDev.app`.
 - 📖 [Quick Start Guide](docs/QUICKSTART.md) - Get started in 5 minutes
 - 📦 [Installation Guide](docs/INSTALL.md) - Detailed installation steps
 - ✅ [Setup Complete](docs/SETUP_COMPLETE.md) - Post-installation summary
-- 💡 [Usage Tips](docs/USAGE_TIPS.md) - How to use VoiceDev effectively
+- 💡 [Usage Tips](docs/USAGE_TIPS.md) - How to use iSpeak effectively
 
 ### Language & Models
 - 🌍 [Language Tips](docs/LANGUAGE_TIPS.md) - Language switching and detection
@@ -274,7 +274,7 @@ MIT License - see [LICENSE](LICENSE) for details
 
 ## Privacy
 
-VoiceDev is designed with privacy as the top priority:
+iSpeak is designed with privacy as the top priority:
 
 - ✅ All processing happens locally on your Mac
 - ✅ No data is sent to any server

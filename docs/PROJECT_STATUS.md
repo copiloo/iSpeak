@@ -1,8 +1,8 @@
-# VoiceDev - Project Status
+# iSpeak - Project Status
 
 ## Overview
 
-VoiceDev is a complete, offline voice-to-text dictation application for macOS developers with first-class Romanian language support.
+iSpeak is a complete, offline voice-to-text dictation application for macOS developers with first-class Romanian language support.
 
 **Status:** ✅ **Core Implementation Complete - Ready for Testing**
 
@@ -10,46 +10,46 @@ VoiceDev is a complete, offline voice-to-text dictation application for macOS de
 
 ### ✅ Core Components (Complete)
 
-1. **Audio Capture Module** ([voicedev/audio_capture.py](voicedev/audio_capture.py))
+1. **Audio Capture Module** ([ispeak/audio_capture.py](ispeak/audio_capture.py))
    - Real-time microphone capture
    - Streaming audio buffer (10-second ring buffer)
    - PyAudio integration
    - Automatic audio normalization for Whisper
 
-2. **Transcription Engine** ([voicedev/transcription.py](voicedev/transcription.py))
+2. **Transcription Engine** ([ispeak/transcription.py](ispeak/transcription.py))
    - faster-whisper integration
    - Multi-language support (Romanian, English, +15 more)
    - Model selection (tiny/base/small/medium)
    - Voice Activity Detection (VAD)
    - Optimized for Apple Silicon (Metal acceleration)
 
-3. **Text Processor** ([voicedev/text_processor.py](voicedev/text_processor.py))
+3. **Text Processor** ([ispeak/text_processor.py](ispeak/text_processor.py))
    - Custom vocabulary system
    - Romanian diacritics correction
    - Code-aware formatting (detects VS Code, PyCharm, etc.)
    - Voice command patterns ("new line", "equals", etc.)
    - Whitespace cleanup
 
-4. **Text Injector** ([voicedev/text_injector.py](voicedev/text_injector.py))
+4. **Text Injector** ([ispeak/text_injector.py](ispeak/text_injector.py))
    - System-wide text injection
    - Clipboard-based pasting (fast)
    - Character-by-character typing (natural)
    - Clipboard preservation
    - Special key support
 
-5. **Hotkey Controller** ([voicedev/hotkey_controller.py](voicedev/hotkey_controller.py))
+5. **Hotkey Controller** ([ispeak/hotkey_controller.py](ispeak/hotkey_controller.py))
    - Global hotkey listener (Right Alt default)
    - Press-and-hold recording
    - Customizable hotkey support
    - Cross-application functionality
 
-6. **Context Detector** ([voicedev/context_detector.py](voicedev/context_detector.py))
+6. **Context Detector** ([ispeak/context_detector.py](ispeak/context_detector.py))
    - Active application detection
    - Code editor recognition
    - File type inference
    - macOS AppKit integration
 
-7. **Main Application** ([voicedev/main.py](voicedev/main.py))
+7. **Main Application** ([ispeak/main.py](ispeak/main.py))
    - PyQt6 system tray UI
    - Menu bar integration
    - Language switching
@@ -91,8 +91,8 @@ VoiceDev is a complete, offline voice-to-text dictation application for macOS de
 ## Project Structure
 
 ```
-voiceDev/
-├── voicedev/                    ✅ Complete
+iSpeak/
+├── ispeak/                    ✅ Complete
 │   ├── __init__.py
 │   ├── main.py                  ✅ System tray app
 │   ├── audio_capture.py         ✅ Audio recording
@@ -147,7 +147,7 @@ voiceDev/
    ```bash
    ./run.sh
    # or manually:
-   cd voicedev && python main.py
+   cd ispeak && python main.py
    ```
 
 4. **Grant Permissions**

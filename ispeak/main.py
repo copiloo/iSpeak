@@ -1,4 +1,4 @@
-# voicedev/main.py
+# ispeak/main.py
 
 import sys
 import os
@@ -17,11 +17,11 @@ from hotkey_controller import HotkeyController
 from context_detector import ContextDetector
 
 
-class VoiceDevApp(QObject):
+class iSpeakApp(QObject):
     def __init__(self):
         super().__init__()
         # Initialize components
-        print("Initializing VoiceDev...")
+        print("Initializing iSpeak...")
 
         self.audio = AudioCapture()
         self.transcriber = TranscriptionEngine(model_size="small")  # Better Romanian accuracy
@@ -47,7 +47,7 @@ class VoiceDevApp(QObject):
 
         self.tray_icon = self._create_tray_icon()
 
-        print("VoiceDev initialized!")
+        print("iSpeak initialized!")
 
     def start_dictation(self):
         """Called when hotkey pressed"""
@@ -257,7 +257,7 @@ class VoiceDevApp(QObject):
             painter.end()
             icon.setIcon(QIcon(pixmap))
 
-        icon.setToolTip("VoiceDev - Ready")
+        icon.setToolTip("iSpeak - Ready")
 
         # Create menu directly here (will be updated later)
         menu = self._create_menu()
@@ -313,7 +313,7 @@ class VoiceDevApp(QObject):
         menu.addSeparator()
 
         # About
-        about_action = menu.addAction("About VoiceDev")
+        about_action = menu.addAction("About iSpeak")
         about_action.triggered.connect(self._show_about)
 
         # Quit
@@ -339,8 +339,8 @@ class VoiceDevApp(QObject):
     def _show_about(self):
         """Show about dialog"""
         msg = QMessageBox()
-        msg.setWindowTitle("About VoiceDev")
-        msg.setText("VoiceDev v0.1.0\n\n"
+        msg.setWindowTitle("About iSpeak")
+        msg.setText("iSpeak v0.1.0\n\n"
                    "Offline voice dictation for developers\n\n"
                    "Press Right Alt to start dictating.\n"
                    f"Current language: {self.current_language.upper()}\n\n"
@@ -350,7 +350,7 @@ class VoiceDevApp(QObject):
     def run(self):
         """Start the application"""
         print("\n" + "="*60)
-        print("🚀 VoiceDev Started!")
+        print("🚀 iSpeak Started!")
         print("="*60)
         print(f"   Hotkey: {self.hotkey.get_hotkey_name()}")
         print(f"   Language: {self.current_language.upper()} (Romanian)")
@@ -370,7 +370,7 @@ class VoiceDevApp(QObject):
 
     def quit(self):
         """Clean shutdown"""
-        print("\nShutting down VoiceDev...")
+        print("\nShutting down iSpeak...")
 
         # Stop hotkey listener
         self.hotkey.stop_listening()
@@ -521,7 +521,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    voice_app = VoiceDevApp()
+    voice_app = iSpeakApp()
     voice_app.run()
 
 

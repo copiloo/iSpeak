@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Auto-Press Enter** feature automatically presses the Enter key after VoiceDev inserts your transcribed text. This is perfect for chat applications, messaging apps, and any scenario where you want to immediately send your dictated message.
+The **Auto-Press Enter** feature automatically presses the Enter key after iSpeak inserts your transcribed text. This is perfect for chat applications, messaging apps, and any scenario where you want to immediately send your dictated message.
 
 ## Use Cases
 
@@ -20,7 +20,7 @@ The **Auto-Press Enter** feature automatically presses the Enter key after Voice
 
 ## How to Enable
 
-1. **Right-click** the VoiceDev menu bar icon
+1. **Right-click** the iSpeak menu bar icon
 2. **Click** "Auto-Press Enter After Dictation"
 3. A checkmark (✓) appears when enabled
 
@@ -42,7 +42,7 @@ The **Auto-Press Enter** feature automatically presses the Enter key after Voice
 2. Speak: "Hello, how are you?"
 3. Release Right Alt
 4. Text appears: "Hello, how are you?"
-5. VoiceDev presses Enter automatically ✨
+5. iSpeak presses Enter automatically ✨
 6. Message sends immediately!
 ```
 
@@ -88,7 +88,7 @@ You can toggle this feature anytime:
 **Enable**: Menu → "Auto-Press Enter After Dictation" (adds ✓)
 **Disable**: Menu → "Auto-Press Enter After Dictation" (removes ✓)
 
-The setting persists until you quit VoiceDev.
+The setting persists until you quit iSpeak.
 
 ## Tips for Best Results
 
@@ -115,7 +115,7 @@ It only takes 2 clicks to toggle!
 
 ## Technical Details
 
-### What VoiceDev Does:
+### What iSpeak Does:
 
 1. Transcribes your speech
 2. Inserts text via clipboard (Cmd+V)
@@ -188,7 +188,7 @@ Potential improvements tracked in [FUTURE_FEATURES.md](FUTURE_FEATURES.md):
 
 ## Summary
 
-**Auto-Press Enter** is a simple but powerful feature that makes VoiceDev perfect for conversational use cases.
+**Auto-Press Enter** is a simple but powerful feature that makes iSpeak perfect for conversational use cases.
 
 **Enable it when**: Chatting, messaging, using AI assistants
 **Disable it when**: Coding, writing documents, filling forms

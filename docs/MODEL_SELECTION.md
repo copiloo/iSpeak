@@ -2,11 +2,11 @@
 
 ## Overview
 
-VoiceDev now supports switching between different Whisper models directly from the system tray menu. You can choose the model that best fits your needs based on speed vs accuracy trade-offs.
+iSpeak now supports switching between different Whisper models directly from the system tray menu. You can choose the model that best fits your needs based on speed vs accuracy trade-offs.
 
 ## How to Switch Models
 
-1. **Right-click** the VoiceDev menu bar icon
+1. **Right-click** the iSpeak menu bar icon
 2. **Hover over** "Select Model"
 3. **Click** on your desired model
 
@@ -64,7 +64,7 @@ Approximate download times (depends on internet speed):
 
 Downloaded models are cached in:
 ```
-voiceDev/voicedev/models/
+iSpeak/ispeak/models/
 ```
 
 They are only downloaded **once** and reused when you switch back.
@@ -133,7 +133,7 @@ Wait for current transcription to finish, then try again.
 1. Check internet connection
 2. Check terminal for error messages
 3. Try downloading again
-4. If persistent, delete `voicedev/models/` and restart
+4. If persistent, delete `ispeak/models/` and restart
 
 ### Downloaded model doesn't work
 
@@ -141,7 +141,7 @@ Wait for current transcription to finish, then try again.
 2. Model file might be corrupted
 3. Delete the model folder:
    ```bash
-   rm -rf voicedev/models/models--Systran--faster-whisper-[model-name]
+   rm -rf ispeak/models/models--Systran--faster-whisper-[model-name]
    ```
 4. Try downloading again
 
@@ -149,7 +149,7 @@ Wait for current transcription to finish, then try again.
 
 Large models need space:
 - Check available disk: `df -h`
-- Delete unused models from `voicedev/models/`
+- Delete unused models from `ispeak/models/`
 - Keep only models you actually use
 
 ## Model Performance Comparison
@@ -189,7 +189,7 @@ Real-world testing results:
 Models are stored in HuggingFace format:
 
 ```
-voicedev/models/
+ispeak/models/
 ├── models--Systran--faster-whisper-base/
 │   └── snapshots/[hash]/
 ├── models--Systran--faster-whisper-small/

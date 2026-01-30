@@ -1,4 +1,4 @@
-# voicedev/audio_capture.py
+# ispeak/audio_capture.py
 
 import pyaudio
 import numpy as np

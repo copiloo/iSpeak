@@ -1,4 +1,4 @@
-# voicedev/text_injector.py
+# ispeak/text_injector.py
 
 from pynput.keyboard import Controller, Key
 import time

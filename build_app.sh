@@ -1,10 +1,10 @@
 #!/bin/bash
-# build_app.sh - Build VoiceDev.app for macOS
+# build_app.sh - Build iSpeak.app for macOS
 
 set -e  # Exit on error
 
 echo "================================================"
-echo "Building VoiceDev.app"
+echo "Building iSpeak.app"
 echo "================================================"
 
 # Activate virtual environment
@@ -28,7 +28,7 @@ rm -rf build dist
 # Build the app
 echo "Building application..."
 pyinstaller \
-    --name VoiceDev \
+    --name iSpeak \
     --windowed \
     --onefile \
     --add-data "resources:resources" \
@@ -41,14 +41,14 @@ pyinstaller \
     --hidden-import pynput \
     --hidden-import pyperclip \
     --hidden-import numpy \
-    voicedev/main.py
+    ispeak/main.py
 
 echo ""
 echo "================================================"
 echo "✅ Build complete!"
 echo "================================================"
-echo "App location: dist/VoiceDev.app"
+echo "App location: dist/iSpeak.app"
 echo ""
-echo "To run: open dist/VoiceDev.app"
+echo "To run: open dist/iSpeak.app"
 echo "To distribute: Create a DMG or zip the .app"
 echo "================================================"

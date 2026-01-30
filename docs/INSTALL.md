@@ -24,7 +24,7 @@ brew info portaudio
 
 ```bash
 git clone <your-repo-url>
-cd voiceDev
+cd iSpeak
 ```
 
 ### 3. Create Virtual Environment
@@ -66,7 +66,7 @@ pip install --no-cache-dir pyaudio
 pip install -r requirements.txt
 ```
 
-**Note:** The first time you run VoiceDev, it will download the Whisper model (~140MB for the base model). This only happens once.
+**Note:** The first time you run iSpeak, it will download the Whisper model (~140MB for the base model). This only happens once.
 
 ### 5. Grant Permissions
 
@@ -93,7 +93,7 @@ Before running the full app, test with the simple prototype:
 python prototype.py
 ```
 
-1. Wait for "VoiceDev Prototype Ready!" message
+1. Wait for "iSpeak Prototype Ready!" message
 2. Press and hold Right Alt
 3. Speak: "acesta este un test"
 4. Release Right Alt
@@ -104,7 +104,7 @@ If this works, proceed to the full app.
 ### 7. Run Full Application
 
 ```bash
-cd voicedev
+cd ispeak
 python main.py
 ```
 
@@ -113,7 +113,7 @@ The app will:
 2. Start the system tray icon
 3. Start listening for the hotkey
 
-Look for the VoiceDev icon in your menu bar!
+Look for the iSpeak icon in your menu bar!
 
 ## Troubleshooting
 
@@ -158,7 +158,7 @@ To create a standalone .app bundle:
 ./build_app.sh
 ```
 
-The app will be created at `dist/VoiceDev.app`.
+The app will be created at `dist/iSpeak.app`.
 
 ## Uninstalling
 

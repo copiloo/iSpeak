@@ -1,9 +1,9 @@
-# VoiceDev Changelog
+# iSpeak Changelog
 
 ## [Unreleased] - 2024-12-27
 
 ### Fixed
-- **Signal connection not working** - Made VoiceDevApp inherit from QObject for proper Qt signal handling
+- **Signal connection not working** - Made iSpeakApp inherit from QObject for proper Qt signal handling
 - **Callback never called** - Added @pyqtSlot decorator for thread-safe signal connections
 - **Hotkey listener hang after text injection** - Added 100ms QTimer delay to prevent keyboard simulation interference
 - **Threading hang on second dictation** - Moved text injection from background thread to main thread
@@ -14,7 +14,7 @@
 
 ### Changed
 - **Upgraded default model from "base" to "small"** - Significantly better Romanian accuracy
-- VoiceDevApp now inherits from QObject for proper Qt integration
+- iSpeakApp now inherits from QObject for proper Qt integration
 - Text injection delayed by 100ms using QTimer to avoid hotkey conflicts
 - Processing flag resets immediately, text injection happens asynchronously
 - Improved error handling in text injection

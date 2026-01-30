@@ -7,7 +7,7 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from voicedev.text_processor import TextProcessor
+from ispeak.text_processor import TextProcessor
 
 
 def test_custom_vocabulary():

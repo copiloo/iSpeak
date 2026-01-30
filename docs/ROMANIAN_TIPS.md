@@ -1,8 +1,8 @@
-# Romanian Language Tips for VoiceDev
+# Romanian Language Tips for iSpeak
 
 ## Understanding Romanian Support
 
-VoiceDev uses OpenAI's Whisper model for speech recognition. While Whisper supports Romanian, **its accuracy for Romanian is lower than for English**. This is a limitation of the AI model itself, not VoiceDev.
+iSpeak uses OpenAI's Whisper model for speech recognition. While Whisper supports Romanian, **its accuracy for Romanian is lower than for English**. This is a limitation of the AI model itself, not iSpeak.
 
 ### Why Romanian Is Harder
 
@@ -13,7 +13,7 @@ VoiceDev uses OpenAI's Whisper model for speech recognition. While Whisper suppo
 
 ## Optimizations Applied
 
-VoiceDev has been optimized for Romanian:
+iSpeak has been optimized for Romanian:
 
 ✅ **Upgraded to "small" model** - Better accuracy than "base" model
 ✅ **Enhanced diacritics correction** - Automatically fixes common mistakes
@@ -85,7 +85,7 @@ Add common terms you use to [vocabulary.json](resources/vocabulary.json):
 }
 ```
 
-Then restart VoiceDev to load the changes.
+Then restart iSpeak to load the changes.
 
 ## Common Romanian Issues & Solutions
 
@@ -93,14 +93,14 @@ Then restart VoiceDev to load the changes.
 
 **Problem**: Whisper outputs "functie" instead of "funcție"
 
-**Solution**: VoiceDev automatically corrects these common words:
+**Solution**: iSpeak automatically corrects these common words:
 - functie → funcție
 - variabila → variabilă
 - metoda → metodă
 - fisier → fișier
 - and 30+ more...
 
-**If a word isn't corrected**: Add it to the corrections list in [text_processor.py](voicedev/text_processor.py#L50)
+**If a word isn't corrected**: Add it to the corrections list in [text_processor.py](ispeak/text_processor.py#L50)
 
 ### Issue 2: Tech Terms Misheard
 
@@ -124,7 +124,7 @@ Then restart VoiceDev to load the changes.
 3. **Model size** - "small" model is slower than "tiny" but more accurate
 
 **To make it faster** (at cost of accuracy):
-Edit [transcription.py:7](voicedev/transcription.py#L7):
+Edit [transcription.py:7](ispeak/transcription.py#L7):
 ```python
 def __init__(self, model_size="tiny", models_dir="./models"):  # Changed from "small"
 ```
@@ -199,7 +199,7 @@ If accuracy > language preference:
 
 **Current setting**: `small` (good balance)
 
-**To change model** edit [transcription.py:7](voicedev/transcription.py#L7):
+**To change model** edit [transcription.py:7](ispeak/transcription.py#L7):
 ```python
 def __init__(self, model_size="medium", models_dir="./models"):  # For better accuracy
 ```
@@ -241,12 +241,12 @@ Expected: "funcție pentru validare utilizator"
 
 ## Improving Romanian Over Time
 
-VoiceDev learns from your custom vocabulary:
+iSpeak learns from your custom vocabulary:
 
 1. **Notice patterns** - What words are consistently wrong?
 2. **Add to vocabulary** - Add mispronunciations → correct spelling
 3. **Update corrections** - Add missing diacritics rules
-4. **Share findings** - Help improve VoiceDev for Romanian users
+4. **Share findings** - Help improve iSpeak for Romanian users
 
 ### Example Learning Process
 
