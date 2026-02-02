@@ -35,19 +35,25 @@ class iSpeakApp(QObject):
         self.context = ContextDetector()
 
         # State
-        self.current_language = "ro"
+        self.current_language = "en"
         self.current_model = "small"  # Track current model
         self.auto_press_enter = False  # Auto-press Enter after dictation
-        self.streaming_mode = True  # Live transcription feedback (default: enabled)
         self.is_processing = False
         self.transcription_thread = None
         self.model_download_thread = None
-        self.interim_thread = None  # For streaming interim transcriptions
-        self.streaming_timer = None  # Timer for periodic interim updates
 
         # UI (System tray)
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)  # Keep running in background
+
+        # Hide from Dock on macOS (menu bar only)
+        if sys.platform == "darwin":
+            try:
+                from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+                ns_app = NSApplication.sharedApplication()
+                ns_app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+            except Exception as e:
+                print(f"Warning: Could not hide Dock icon: {e}")
 
         self.tray_icon = self._create_tray_icon()
 
@@ -64,27 +70,11 @@ class iSpeakApp(QObject):
         # Start audio recording
         self.audio.start_recording()
 
-        # Show overlay based on mode
-        if self.streaming_mode:
-            QTimer.singleShot(0, self.overlay.show_streaming)
-            # Start periodic interim transcription (every 1.5 seconds)
-            self.streaming_timer = QTimer()
-            self.streaming_timer.timeout.connect(self._do_interim_transcription)
-            self.streaming_timer.start(1500)  # 1.5 second intervals
-        else:
-            QTimer.singleShot(0, self.overlay.show_listening)
+        # Show overlay
+        QTimer.singleShot(0, self.overlay.show_listening)
 
     def stop_dictation(self):
         """Called when hotkey released"""
-        # Stop streaming timer if running
-        if self.streaming_timer is not None:
-            self.streaming_timer.stop()
-            self.streaming_timer = None
-
-        # Cancel any running interim transcription
-        if self.interim_thread is not None and self.interim_thread.isRunning():
-            self.interim_thread.wait(500)
-
         if self.is_processing:
             print("⚠️  Already processing, please wait...")
             return
@@ -164,56 +154,6 @@ class iSpeakApp(QObject):
             print(f"[Main] ❌ Error injecting text: {e}")
             import traceback
             traceback.print_exc()
-
-    def _do_interim_transcription(self):
-        """Perform interim transcription during recording for live feedback."""
-        if not self.audio.is_recording:
-            return
-
-        # Get current audio buffer (without stopping recording)
-        import numpy as np
-        if len(self.audio.audio_buffer) < 50:  # Less than ~3 seconds
-            return
-
-        # Get a copy of current audio for interim processing
-        audio_chunks = list(self.audio.audio_buffer)
-        if not audio_chunks:
-            return
-
-        audio_data = np.concatenate(audio_chunks).astype(np.float32) / 32768.0
-
-        # Don't process if too short
-        if len(audio_data) < 8000:  # Less than 0.5 seconds
-            return
-
-        # Clean up previous interim thread
-        if self.interim_thread is not None:
-            if self.interim_thread.isRunning():
-                return  # Still processing previous interim
-
-        # Run interim transcription in background
-        self.interim_thread = InterimTranscriptionThread(
-            audio_data,
-            self.transcriber,
-            self.current_language
-        )
-        self.interim_thread.finished.connect(self._on_interim_done)
-        self.interim_thread.start()
-
-    @pyqtSlot(str)
-    def _on_interim_done(self, text: str):
-        """Called when interim transcription completes."""
-        if text and self.audio.is_recording:
-            # Update overlay with interim text
-            QTimer.singleShot(0, lambda: self.overlay.update_interim_text(text))
-            print(f"[Interim] '{text[:50]}{'...' if len(text) > 50 else ''}'")
-
-    def toggle_streaming(self):
-        """Toggle streaming/live feedback mode"""
-        self.streaming_mode = not self.streaming_mode
-        status = "enabled" if self.streaming_mode else "disabled"
-        print(f"📺 Live transcription feedback {status}")
-        self._update_tray_menu()
 
     def toggle_language(self):
         """Switch between Romanian and English"""
@@ -382,12 +322,6 @@ class iSpeakApp(QObject):
         auto_enter_action.setChecked(self.auto_press_enter)
         auto_enter_action.triggered.connect(self.toggle_auto_enter)
 
-        # Streaming mode toggle
-        streaming_action = menu.addAction("Live Transcription Preview")
-        streaming_action.setCheckable(True)
-        streaming_action.setChecked(self.streaming_mode)
-        streaming_action.triggered.connect(self.toggle_streaming)
-
         menu.addSeparator()
 
         # Model selection submenu
@@ -445,8 +379,6 @@ class iSpeakApp(QObject):
         if backend_info['using_mlx']:
             backend_str += " (Apple Silicon optimized)"
 
-        streaming_str = "Enabled" if self.streaming_mode else "Disabled"
-
         msg = QMessageBox()
         msg.setWindowTitle("About iSpeak")
         msg.setText("iSpeak v0.3.0\n\n"
@@ -454,8 +386,7 @@ class iSpeakApp(QObject):
                    "Press Right Alt to start dictating.\n"
                    f"Language: {self.current_language.upper()}\n"
                    f"Model: {self.current_model}\n"
-                   f"Backend: {backend_str}\n"
-                   f"Live Preview: {streaming_str}\n\n"
+                   f"Backend: {backend_str}\n\n"
                    "Your voice never leaves your Mac.")
         msg.exec()
 
@@ -472,15 +403,12 @@ class iSpeakApp(QObject):
         print(f"   Model: {self.transcriber.model_size}")
         print(f"   Backend: {backend_info['backend'].upper()}" +
               (" (Apple Silicon optimized)" if backend_info['using_mlx'] else ""))
-        print(f"   Live Preview: {'Enabled' if self.streaming_mode else 'Disabled'}")
         print("="*60)
-        print("\n⚠️  IMPORTANT: Default language is ROMANIAN (RO)")
-        print("   To switch to English: Right-click menu icon > Toggle Language")
+        print("\n⚠️  IMPORTANT: Default language is ENGLISH (EN)")
+        print("   To switch to Romanian: Right-click menu icon > Toggle Language")
         print(f"   Current setting: {self.current_language.upper()}")
         if backend_info['mlx_available']:
             print("\n✨ MLX-Whisper detected - using optimized Apple Silicon backend!")
-        if self.streaming_mode:
-            print("📺 Live transcription preview is ON - see text as you speak!")
         print("\nPress the hotkey and start speaking!")
         print("Right-click the menu bar icon for options.\n")
 
@@ -511,29 +439,6 @@ class iSpeakApp(QObject):
         # Quit application
         self.app.quit()
         print("Goodbye!")
-
-
-class InterimTranscriptionThread(QThread):
-    """Background thread for fast interim transcription during streaming mode."""
-    finished = pyqtSignal(str)  # interim text
-
-    def __init__(self, audio_data, transcriber, language):
-        super().__init__()
-        self.audio_data = audio_data
-        self.transcriber = transcriber
-        self.language = language
-
-    def run(self):
-        """Execute fast interim transcription."""
-        try:
-            text = self.transcriber.transcribe_interim(
-                self.audio_data,
-                language=self.language
-            )
-            self.finished.emit(text)
-        except Exception as e:
-            print(f"[InterimTranscription] Error: {e}")
-            self.finished.emit("")
 
 
 class ModelLoadThread(QThread):

@@ -2,6 +2,7 @@
 
 import pyaudio
 import numpy as np
+import time
 from collections import deque
 
 class AudioCapture:
@@ -35,10 +36,17 @@ class AudioCapture:
             device_name = default_info.get('name', 'Unknown')
             device_index = default_info.get('index')
             print(f"[Audio] Using input device: {device_name} (index {device_index})")
-            return device_index
+
+            # Check if it's a Bluetooth device (needs warm-up time)
+            is_bluetooth = any(keyword in device_name.lower()
+                             for keyword in ['airpods', 'bluetooth', 'wireless', 'bt'])
+            if is_bluetooth:
+                print(f"[Audio] Bluetooth device detected, may need warm-up time")
+
+            return device_index, is_bluetooth
         except Exception as e:
             print(f"[Audio] Could not get default input device: {e}")
-            return None
+            return None, False
 
     def start_recording(self):
         """Start capturing audio"""
@@ -50,7 +58,7 @@ class AudioCapture:
 
         try:
             # Get current default input device
-            device_index = self._get_default_input_device()
+            device_index, is_bluetooth = self._get_default_input_device()
 
             self.stream = self.p.open(
                 format=pyaudio.paInt16,
@@ -62,6 +70,11 @@ class AudioCapture:
                 stream_callback=self._audio_callback
             )
             self.stream.start_stream()
+
+            # Give Bluetooth devices a moment to warm up
+            if is_bluetooth:
+                time.sleep(0.2)  # 200ms warm-up for Bluetooth devices
+
         except Exception as e:
             print(f"[Audio] Error opening stream: {e}")
             # Try again without specifying device (use system default)
@@ -98,10 +111,24 @@ class AudioCapture:
 
         # Combine all chunks into single array
         if len(self.audio_buffer) == 0:
+            print("[Audio] ⚠️  No audio data captured")
             return np.array([], dtype=np.float32)
 
         # Optimized: concatenate and convert in one step to avoid intermediate allocation
         audio_float = np.concatenate(list(self.audio_buffer)).astype(np.float32) / 32768.0
+
+        # Check audio levels to detect silent recordings
+        audio_level = np.abs(audio_float).max()
+        audio_rms = np.sqrt(np.mean(audio_float ** 2))
+
+        if audio_level < 0.001:
+            print(f"[Audio] ⚠️  Audio is silent! Max level: {audio_level:.6f}")
+            print("[Audio] This might be a device issue. Try:")
+            print("   1. Speak louder or move closer to microphone")
+            print("   2. Check system audio input settings")
+            print("   3. Try recording again (first recording after device change may fail)")
+        else:
+            print(f"[Audio] Audio captured: max={audio_level:.3f}, rms={audio_rms:.3f}")
 
         return audio_float
 

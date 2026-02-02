@@ -44,9 +44,9 @@ class OverlayWidget(QWidget):
         # Ensure we never become the active window
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
-        # Size (dynamic for streaming mode)
-        self._base_width = 200
-        self._base_height = 80
+        # Size (dynamic for streaming mode) - reduced for smaller overlay
+        self._base_width = 80
+        self._base_height = 20
         self._max_width = 600  # Maximum width for text display
         self._text_height = 100  # Height when showing text
         self._width = self._base_width
@@ -58,17 +58,17 @@ class OverlayWidget(QWidget):
         self._timer.timeout.connect(self._animate)
         self._timer.setInterval(16)  # ~60fps
 
-        # Waveform bar settings
+        # Waveform bar settings - reduced size
         self._num_bars = 7
-        self._bar_width = 8
-        self._bar_gap = 6
-        self._bar_max_height = 50
-        self._bar_min_height = 10
+        self._bar_width = 3
+        self._bar_gap = 3
+        self._bar_max_height = 15
+        self._bar_min_height = 8
 
-        # Processing dots settings
+        # Processing dots settings - reduced size
         self._num_dots = 3
-        self._dot_radius = 8
-        self._dot_gap = 20
+        self._dot_radius = 2
+        self._dot_gap = 10
 
         # Colors
         self._bg_color = QColor(30, 30, 30, 220)
@@ -236,7 +236,7 @@ class OverlayWidget(QWidget):
             bounce = max(0, math.sin(self._animation_frame * 1.5 + phase_offset))
 
             x = start_x + i * (self._dot_radius * 2 + self._dot_gap)
-            y = center_y - bounce * 15  # Bounce up to 15px
+            y = center_y - bounce * 4  # Bounce up to 10px (reduced for smaller overlay)
 
             # Fade based on bounce
             alpha = int(150 + 105 * bounce)

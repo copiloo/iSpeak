@@ -76,6 +76,22 @@ class TranscriptionEngine:
                 self.backend = "mlx"
                 load_time = time.time() - start_time
                 print(f"[Transcription] MLX backend ready: {model_size} ({load_time:.2f}s)")
+
+                # Always load faster-whisper as fallback, even when using MLX
+                print(f"[Transcription] Loading faster-whisper as fallback...")
+                fw_start = time.time()
+                fw_model = model_size
+                if model_size == "turbo":
+                    fw_model = "large-v3-turbo"
+
+                self.model = WhisperModel(
+                    fw_model,
+                    device="auto",
+                    compute_type="int8",
+                    download_root=self.models_dir
+                )
+                fw_time = time.time() - fw_start
+                print(f"[Transcription] Fallback model loaded ({fw_time:.2f}s)")
                 return
             except Exception as e:
                 print(f"[Transcription] MLX load failed: {e}, falling back to faster-whisper")
@@ -133,10 +149,13 @@ class TranscriptionEngine:
                 audio_data,
                 path_or_hf_repo=self.mlx_model_path,
                 language=language,
-                # Optimized parameters for speed
-                beam_size=3,              # Reduced from 5 for speed (minimal accuracy loss)
+                verbose=False,            # Disable verbose output
+                # Speed optimizations - single pass, no retries
+                temperature=0.0,          # Fixed temperature, no fallback retries
+                compression_ratio_threshold=None,  # Disable quality-based retries
+                logprob_threshold=None,   # Disable quality-based retries
                 condition_on_previous_text=False,  # Faster for short dictation
-                fp16=True,                # Use half precision for speed
+                word_timestamps=False,    # Don't need word-level timestamps
             )
 
             text = result.get("text", "").strip()
@@ -250,9 +269,12 @@ class TranscriptionEngine:
                     audio_data,
                     path_or_hf_repo=self.mlx_model_path,
                     language=language,
-                    beam_size=1,  # Fastest beam search
+                    verbose=False,
+                    temperature=0.0,
+                    compression_ratio_threshold=None,
+                    logprob_threshold=None,
                     condition_on_previous_text=False,
-                    fp16=True,
+                    word_timestamps=False,
                 )
                 return result.get("text", "").strip()
             else:
