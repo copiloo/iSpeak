@@ -1,5 +1,5 @@
 # Core dependencies
-faster-whisper>=0.10.0          # Fast Whisper implementation
+faster-whisper>=0.10.0          # Fast Whisper implementation (fallback)
 pyaudio>=0.2.13                 # Audio capture
 pynput>=1.7.6                   # Keyboard control & hotkeys
 pyperclip>=1.8.2                # Clipboard operations
@@ -9,6 +9,10 @@ numpy>=1.24.0                   # Audio processing
 # macOS-specific (only on macOS)
 pyobjc-framework-Cocoa>=10.0 ; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0 ; sys_platform == 'darwin'
+
+# MLX for Apple Silicon (30-40% faster than faster-whisper)
+mlx>=0.5.0 ; sys_platform == 'darwin'
+mlx-whisper>=0.1.0 ; sys_platform == 'darwin'
 
 # Optional for better performance
 # torch>=2.0.0                  # If you want GPU acceleration

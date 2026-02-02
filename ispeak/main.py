@@ -183,7 +183,8 @@ class iSpeakApp(QObject):
             "base": "Fast, fair accuracy. ~142MB download.",
             "small": "Balanced speed and accuracy. ~466MB download. Recommended for Romanian.",
             "medium": "Slower, excellent accuracy. ~1.5GB download.",
-            "large": "Slowest, best accuracy. ~2.9GB download."
+            "large": "Slowest, best accuracy. ~2.9GB download.",
+            "turbo": "Fast + accurate! 6x faster than large with ~1% accuracy loss. ~800MB download. Recommended!",
         }
         msg.setInformativeText(
             f"{model_info.get(model_name, '')}\n\n"
@@ -219,22 +220,27 @@ class iSpeakApp(QObject):
         print(message)
 
     @pyqtSlot(bool, str, object)
-    def _on_model_loaded(self, success: bool, model_name: str, model_obj):
+    def _on_model_loaded(self, success: bool, model_name: str, backend_info: dict):
         """Called when model loading completes"""
         if success:
-            # Replace the transcriber's model
-            self.transcriber.model = model_obj
+            # Update transcriber with new model info
             self.transcriber.model_size = model_name
+            self.transcriber.backend = backend_info.get("backend", "faster-whisper")
+            if backend_info.get("model"):
+                self.transcriber.model = backend_info["model"]
+            if backend_info.get("mlx_model_path"):
+                self.transcriber.mlx_model_path = backend_info["mlx_model_path"]
             self.current_model = model_name
 
-            print(f"✅ Model switched to: {model_name}")
+            backend_name = backend_info.get("backend", "faster-whisper").upper()
+            print(f"✅ Model switched to: {model_name} ({backend_name})")
             self.tray_icon.setToolTip("✅ Ready")
 
             # Show success message
             QMessageBox.information(
                 None,
                 "Model Loaded",
-                f"Successfully switched to '{model_name}' model!"
+                f"Successfully switched to '{model_name}' model!\nBackend: {backend_name}"
             )
         else:
             print(f"❌ Failed to load {model_name} model")
@@ -286,7 +292,9 @@ class iSpeakApp(QObject):
         status_action = menu.addAction(f"Language: {self.current_language.upper()}")
         status_action.setEnabled(False)
 
-        model_status_action = menu.addAction(f"Model: {self.current_model}")
+        backend_info = self.transcriber.get_backend_info()
+        backend_label = "MLX" if backend_info['using_mlx'] else "FW"
+        model_status_action = menu.addAction(f"Model: {self.current_model} ({backend_label})")
         model_status_action.setEnabled(False)
 
         menu.addSeparator()
@@ -305,9 +313,10 @@ class iSpeakApp(QObject):
         model_menu = menu.addMenu("Select Model")
 
         models = [
+            ("turbo", "Turbo (fast + accurate) ⭐ NEW"),
             ("tiny", "Tiny (fastest, least accurate)"),
             ("base", "Base (fast, fair accuracy)"),
-            ("small", "Small (balanced) ⭐"),
+            ("small", "Small (balanced)"),
             ("medium", "Medium (slow, excellent)"),
             ("large", "Large (very slow, best)")
         ]
@@ -350,27 +359,41 @@ class iSpeakApp(QObject):
 
     def _show_about(self):
         """Show about dialog"""
+        backend_info = self.transcriber.get_backend_info()
+        backend_str = backend_info['backend'].upper()
+        if backend_info['using_mlx']:
+            backend_str += " (Apple Silicon optimized)"
+
         msg = QMessageBox()
         msg.setWindowTitle("About iSpeak")
-        msg.setText("iSpeak v0.1.0\n\n"
+        msg.setText("iSpeak v0.2.0\n\n"
                    "Offline voice dictation for developers\n\n"
                    "Press Right Alt to start dictating.\n"
-                   f"Current language: {self.current_language.upper()}\n\n"
+                   f"Language: {self.current_language.upper()}\n"
+                   f"Model: {self.current_model}\n"
+                   f"Backend: {backend_str}\n\n"
                    "Your voice never leaves your Mac.")
         msg.exec()
 
     def run(self):
         """Start the application"""
+        # Get backend info
+        backend_info = self.transcriber.get_backend_info()
+
         print("\n" + "="*60)
         print("🚀 iSpeak Started!")
         print("="*60)
         print(f"   Hotkey: {self.hotkey.get_hotkey_name()}")
         print(f"   Language: {self.current_language.upper()} (Romanian)")
         print(f"   Model: {self.transcriber.model_size}")
+        print(f"   Backend: {backend_info['backend'].upper()}" +
+              (" (Apple Silicon optimized)" if backend_info['using_mlx'] else ""))
         print("="*60)
         print("\n⚠️  IMPORTANT: Default language is ROMANIAN (RO)")
         print("   To switch to English: Right-click menu icon > Toggle Language")
         print(f"   Current setting: {self.current_language.upper()}")
+        if backend_info['mlx_available']:
+            print("\n✨ MLX-Whisper detected - using optimized Apple Silicon backend!")
         print("\nPress the hotkey and start speaking!")
         print("Right-click the menu bar icon for options.\n")
 
@@ -405,24 +428,71 @@ class iSpeakApp(QObject):
 
 class ModelLoadThread(QThread):
     """Background thread for loading/downloading Whisper models"""
-    finished = pyqtSignal(bool, str, object)  # success, model_name, model_object
+    finished = pyqtSignal(bool, str, object)  # success, model_name, backend_info dict
     progress = pyqtSignal(str)  # progress message
 
-    def __init__(self, model_name: str, models_dir="./models"):
+    # MLX model mapping
+    MLX_MODELS = {
+        "tiny": "mlx-community/whisper-tiny-mlx",
+        "base": "mlx-community/whisper-base-mlx",
+        "small": "mlx-community/whisper-small-mlx",
+        "medium": "mlx-community/whisper-medium-mlx",
+        "large": "mlx-community/whisper-large-v3-mlx",
+        "large-v3": "mlx-community/whisper-large-v3-mlx",
+        "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
+        "turbo": "mlx-community/whisper-large-v3-turbo",
+    }
+
+    def __init__(self, model_name: str, models_dir="./models", use_mlx=True):
         super().__init__()
         self.model_name = model_name
         self.models_dir = models_dir
+        self.use_mlx = use_mlx
 
     def run(self):
         """Load model in background with progress updates"""
+        import sys
+
+        # Try MLX first on macOS
+        if self.use_mlx and sys.platform == "darwin" and self.model_name in self.MLX_MODELS:
+            try:
+                import mlx_whisper
+                self.progress.emit(f"📥 Loading {self.model_name} model (MLX)...")
+
+                start_time = time.time()
+                mlx_model_path = self.MLX_MODELS[self.model_name]
+
+                # MLX models are loaded lazily during transcribe, so just verify the path
+                load_time = time.time() - start_time
+
+                self.progress.emit(f"✅ {self.model_name} model ready (MLX) in {load_time:.1f}s")
+                print(f"Model {self.model_name} ready via MLX in {load_time:.1f}s")
+
+                # Emit success with MLX backend info
+                self.finished.emit(True, self.model_name, {
+                    "backend": "mlx",
+                    "mlx_model_path": mlx_model_path,
+                    "model": None  # MLX loads lazily
+                })
+                return
+            except ImportError:
+                print("MLX-Whisper not available, falling back to faster-whisper")
+            except Exception as e:
+                print(f"MLX load failed: {e}, falling back to faster-whisper")
+
+        # Fallback to faster-whisper
         try:
             from faster_whisper import WhisperModel
-            import os
 
-            self.progress.emit(f"📥 Loading {self.model_name} model...")
+            self.progress.emit(f"📥 Loading {self.model_name} model (faster-whisper)...")
+
+            # Map turbo to faster-whisper model name
+            fw_model = self.model_name
+            if self.model_name == "turbo":
+                fw_model = "large-v3-turbo"
 
             # Check if model exists locally
-            model_dir = os.path.join(self.models_dir, f"models--Systran--faster-whisper-{self.model_name}")
+            model_dir = os.path.join(self.models_dir, f"models--Systran--faster-whisper-{fw_model}")
             model_exists = os.path.exists(model_dir)
 
             if not model_exists:
@@ -434,7 +504,7 @@ class ModelLoadThread(QThread):
             # Load the model (will download if not present)
             start_time = time.time()
             model = WhisperModel(
-                self.model_name,
+                fw_model,
                 device="auto",
                 compute_type="int8",
                 download_root=self.models_dir
@@ -444,8 +514,12 @@ class ModelLoadThread(QThread):
             self.progress.emit(f"✅ {self.model_name} model loaded in {load_time:.1f}s")
             print(f"Model {self.model_name} loaded successfully in {load_time:.1f}s")
 
-            # Emit success
-            self.finished.emit(True, self.model_name, model)
+            # Emit success with faster-whisper backend info
+            self.finished.emit(True, self.model_name, {
+                "backend": "faster-whisper",
+                "model": model,
+                "mlx_model_path": None
+            })
 
         except Exception as e:
             error_msg = f"❌ Error loading {self.model_name} model: {e}"
@@ -453,7 +527,7 @@ class ModelLoadThread(QThread):
             print(error_msg)
             import traceback
             traceback.print_exc()
-            self.finished.emit(False, self.model_name, None)
+            self.finished.emit(False, self.model_name, {})
 
 
 class TranscriptionThread(QThread):
@@ -484,9 +558,10 @@ class TranscriptionThread(QThread):
             text = result["text"]
             detected_lang = result["language"]
             confidence = result.get("confidence", 0.0)
+            backend = result.get("backend", "unknown")
 
-            transcribe_time = time.time() - start_time
-            print(f"Transcription took {transcribe_time:.2f}s")
+            transcribe_time = result.get("transcribe_time", time.time() - start_time)
+            print(f"Transcription took {transcribe_time:.2f}s ({backend})")
             print(f"Requested: {self.language.upper()}, Detected: {detected_lang.upper()}, Confidence: {confidence:.2f}")
 
             # Warn on language mismatch
