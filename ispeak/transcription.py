@@ -50,40 +50,28 @@ class TranscriptionEngine:
             )
         )
 
-        # Combine all segments
-        text = " ".join([segment.text for segment in segments])
+        # Combine all segments and calculate confidence
+        segments_list = list(segments)
+        text = " ".join([segment.text for segment in segments_list])
+
+        # Calculate average confidence from segment log probabilities
+        # avg_logprob is typically in range [-1, 0], closer to 0 = higher confidence
+        if segments_list:
+            avg_confidence = sum(segment.avg_logprob for segment in segments_list) / len(segments_list)
+            # Convert log probability to a 0-1 scale (approximate)
+            # -1.0 or worse → ~0.37, 0 → 1.0
+            confidence_score = min(1.0, max(0.0, 1.0 + avg_confidence))
+        else:
+            confidence_score = 0.0
 
         return {
             "text": text.strip(),
             "language": info.language,
-            "segments": list(segments)
+            "confidence": confidence_score,
+            "segments": segments_list
         }
-
-    def transcribe_realtime(self, audio_data):
-        """
-        Faster transcription for real-time use
-        Lower accuracy but instant feedback
-        """
-        segments, info = self.model.transcribe(
-            audio_data,
-            language=self.current_language,
-            beam_size=1,      # Fastest beam search
-            vad_filter=True,
-            without_timestamps=True  # Skip timestamp calculation
-        )
-
-        text = " ".join([segment.text for segment in segments])
-        return text.strip()
 
     def set_language(self, lang_code):
         """Switch language: 'ro', 'en', etc."""
         self.current_language = lang_code
         print(f"Language set to: {lang_code}")
-
-    def get_supported_languages(self):
-        """Return list of supported languages"""
-        return [
-            "en", "ro", "es", "fr", "de", "it", "pt", "nl",
-            "pl", "ru", "ja", "ko", "zh", "ar", "hi", "tr"
-            # Whisper supports 99 languages total
-        ]

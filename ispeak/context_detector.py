@@ -53,17 +53,20 @@ class ContextDetector:
         """
         Try to determine what file user is editing
         This is a basic heuristic - could be improved with accessibility API
+        Note: Returns empty string for generic code editors to avoid wrong assumptions
         """
         app_name = app.localizedName()
-        bundle_id = app.bundleIdentifier()
 
-        # Map app to common file types
+        # Map specialized IDEs to their primary file types
+        # Generic editors (VS Code, Sublime) return empty since they're multi-language
         app_file_map = {
-            'Code': '.py',  # VS Code - assume Python
             'PyCharm': '.py',
             'IntelliJ IDEA': '.java',
+            'WebStorm': '.js',
+            'GoLand': '.go',
+            'RubyMine': '.rb',
             'Xcode': '.swift',
-            'Sublime Text': '.txt',
+            'Android Studio': '.kt',
             'TextEdit': '.txt',
         }
 
@@ -71,10 +74,8 @@ class ContextDetector:
             if key in app_name:
                 return file_type
 
-        # Check bundle ID for more specific detection
-        if 'vscode' in bundle_id.lower():
-            return '.js'  # Default to JavaScript for VS Code
-
+        # Generic multi-language editors - return empty to avoid wrong assumptions
+        # Code formatting will still apply based on app detection in is_code_editor()
         return ''
 
     def is_code_editor(self, app_name: str) -> bool:

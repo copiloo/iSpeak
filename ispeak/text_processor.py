@@ -59,7 +59,6 @@ class TextProcessor:
             # Variables
             "variabila": "variabilă",
             "variabile": "variabile",
-            "variabila": "variabilă",
 
             # Class
             "clasa": "clasă",

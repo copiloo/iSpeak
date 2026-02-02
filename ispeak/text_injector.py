@@ -44,16 +44,16 @@ class TextInjector:
             try:
                 old_clipboard = pyperclip.paste()
                 print(f"[TextInjector] Saved old clipboard")
-            except:
+            except Exception as e:
                 old_clipboard = ""
-                print(f"[TextInjector] Could not read clipboard, continuing...")
+                print(f"[TextInjector] Could not read clipboard ({e}), continuing...")
 
             # Copy new text
             pyperclip.copy(text)
             print(f"[TextInjector] Copied text to clipboard")
 
-            # Small delay to ensure clipboard is updated
-            time.sleep(0.05)
+            # Small delay to ensure clipboard is updated (reduced from 50ms to 25ms)
+            time.sleep(0.025)
 
             # Paste (Cmd+V on Mac)
             print(f"[TextInjector] Simulating Cmd+V...")
@@ -61,8 +61,8 @@ class TextInjector:
                 self.keyboard.press('v')
                 self.keyboard.release('v')
 
-            # Wait for paste to complete
-            time.sleep(0.1)
+            # Wait for paste to complete (reduced from 100ms to 50ms)
+            time.sleep(0.05)
             print(f"[TextInjector] Paste complete")
 
             # Restore old clipboard
@@ -101,15 +101,3 @@ class TextInjector:
         if key:
             self.keyboard.press(key)
             self.keyboard.release(key)
-
-    def delete_last_word(self):
-        """Delete the last word (useful for corrections)"""
-        # Option+Backspace on Mac deletes word
-        with self.keyboard.pressed(Key.alt):
-            self.keyboard.press(Key.backspace)
-            self.keyboard.release(Key.backspace)
-
-    def delete_last_character(self):
-        """Delete the last character"""
-        self.keyboard.press(Key.backspace)
-        self.keyboard.release(Key.backspace)

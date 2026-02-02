@@ -14,6 +14,7 @@ class HotkeyController:
         self.on_stop = on_stop_callback
 
         self.is_recording = False
+        self._state_lock = threading.Lock()  # Protect is_recording from race conditions
 
         # Default hotkey: Right Option (Alt) key
         # Can be customized by user
@@ -40,18 +41,22 @@ class HotkeyController:
     def _on_press(self, key):
         """Called when any key is pressed"""
         try:
-            if key == self.hotkey and not self.is_recording:
-                self.is_recording = True
-                self.on_start()  # Start recording
+            if key == self.hotkey:
+                with self._state_lock:
+                    if not self.is_recording:
+                        self.is_recording = True
+                        self.on_start()  # Start recording
         except Exception as e:
             print(f"Error in key press handler: {e}")
 
     def _on_release(self, key):
         """Called when any key is released"""
         try:
-            if key == self.hotkey and self.is_recording:
-                self.is_recording = False
-                self.on_stop()  # Stop recording and transcribe
+            if key == self.hotkey:
+                with self._state_lock:
+                    if self.is_recording:
+                        self.is_recording = False
+                        self.on_stop()  # Stop recording and transcribe
         except Exception as e:
             print(f"Error in key release handler: {e}")
 

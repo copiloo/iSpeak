@@ -24,8 +24,8 @@ class AudioCapture:
         if self.p is not None:
             try:
                 self.p.terminate()
-            except:
-                pass
+            except Exception as e:
+                print(f"[Audio] Warning: Error terminating PyAudio: {e}")
         self.p = pyaudio.PyAudio()
 
     def _get_default_input_device(self):
@@ -100,10 +100,8 @@ class AudioCapture:
         if len(self.audio_buffer) == 0:
             return np.array([], dtype=np.float32)
 
-        audio_data = np.concatenate(list(self.audio_buffer))
-
-        # Convert to float32 normalized (Whisper requirement)
-        audio_float = audio_data.astype(np.float32) / 32768.0
+        # Optimized: concatenate and convert in one step to avoid intermediate allocation
+        audio_float = np.concatenate(list(self.audio_buffer)).astype(np.float32) / 32768.0
 
         return audio_float
 
@@ -112,10 +110,10 @@ class AudioCapture:
         if self.stream:
             try:
                 self.stream.close()
-            except:
-                pass
+            except Exception as e:
+                print(f"[Audio] Warning: Error closing stream: {e}")
         if self.p:
             try:
                 self.p.terminate()
-            except:
-                pass
+            except Exception as e:
+                print(f"[Audio] Warning: Error terminating PyAudio: {e}")

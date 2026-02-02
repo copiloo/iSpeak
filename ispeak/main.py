@@ -3,8 +3,8 @@
 import sys
 import os
 import signal
-from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget, QMessageBox, QProgressDialog
-from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QColor
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, pyqtSlot, QTimer
 import time
 
@@ -72,8 +72,8 @@ class iSpeakApp(QObject):
         # Get audio data
         audio_data = self.audio.stop_recording()
 
-        # Check if we have audio
-        if len(audio_data) < 1600:  # Less than 0.1 seconds
+        # Check if we have audio (4800 samples = 0.3 seconds at 16kHz)
+        if len(audio_data) < 4800:  # Less than 0.3 seconds
             print("❌ Recording too short, ignoring (hold key longer)")
             self.tray_icon.setToolTip("✅ Ready")
             QTimer.singleShot(0, self.overlay.hide_overlay)
@@ -483,10 +483,19 @@ class TranscriptionThread(QThread):
             )
             text = result["text"]
             detected_lang = result["language"]
+            confidence = result.get("confidence", 0.0)
 
             transcribe_time = time.time() - start_time
             print(f"Transcription took {transcribe_time:.2f}s")
-            print(f"Requested: {self.language.upper()}, Detected: {detected_lang.upper()}")
+            print(f"Requested: {self.language.upper()}, Detected: {detected_lang.upper()}, Confidence: {confidence:.2f}")
+
+            # Warn on language mismatch
+            if detected_lang != self.language:
+                print(f"⚠️  Language mismatch: requested {self.language.upper()}, but detected {detected_lang.upper()}")
+
+            # Warn on low confidence (below 0.5 threshold)
+            if confidence < 0.5:
+                print(f"⚠️  Low confidence transcription ({confidence:.2f}). Result may be inaccurate.")
 
             if not text:
                 print("No speech detected")
