@@ -16,23 +16,70 @@ class AudioCapture:
         self.audio_buffer = deque(maxlen=300)  # ~10 seconds buffer
         self.is_recording = False
 
-        self.p = pyaudio.PyAudio()
+        self.p = None
         self.stream = None
+
+    def _init_pyaudio(self):
+        """Initialize or reinitialize PyAudio to detect device changes."""
+        if self.p is not None:
+            try:
+                self.p.terminate()
+            except:
+                pass
+        self.p = pyaudio.PyAudio()
+
+    def _get_default_input_device(self):
+        """Get the current default input device index."""
+        try:
+            default_info = self.p.get_default_input_device_info()
+            device_name = default_info.get('name', 'Unknown')
+            device_index = default_info.get('index')
+            print(f"[Audio] Using input device: {device_name} (index {device_index})")
+            return device_index
+        except Exception as e:
+            print(f"[Audio] Could not get default input device: {e}")
+            return None
 
     def start_recording(self):
         """Start capturing audio"""
         self.is_recording = True
         self.audio_buffer.clear()
 
-        self.stream = self.p.open(
-            format=pyaudio.paInt16,
-            channels=self.channels,
-            rate=self.rate,
-            input=True,
-            frames_per_buffer=self.chunk_size,
-            stream_callback=self._audio_callback
-        )
-        self.stream.start_stream()
+        # Reinitialize PyAudio to detect device changes (e.g., AirPods connected)
+        self._init_pyaudio()
+
+        try:
+            # Get current default input device
+            device_index = self._get_default_input_device()
+
+            self.stream = self.p.open(
+                format=pyaudio.paInt16,
+                channels=self.channels,
+                rate=self.rate,
+                input=True,
+                input_device_index=device_index,
+                frames_per_buffer=self.chunk_size,
+                stream_callback=self._audio_callback
+            )
+            self.stream.start_stream()
+        except Exception as e:
+            print(f"[Audio] Error opening stream: {e}")
+            # Try again without specifying device (use system default)
+            try:
+                print("[Audio] Retrying with system default device...")
+                self.stream = self.p.open(
+                    format=pyaudio.paInt16,
+                    channels=self.channels,
+                    rate=self.rate,
+                    input=True,
+                    frames_per_buffer=self.chunk_size,
+                    stream_callback=self._audio_callback
+                )
+                self.stream.start_stream()
+            except Exception as e2:
+                print(f"[Audio] Failed to open audio stream: {e2}")
+                self.is_recording = False
+                raise
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Called continuously while recording"""
@@ -63,5 +110,12 @@ class AudioCapture:
     def cleanup(self):
         """Clean up resources"""
         if self.stream:
-            self.stream.close()
-        self.p.terminate()
+            try:
+                self.stream.close()
+            except:
+                pass
+        if self.p:
+            try:
+                self.p.terminate()
+            except:
+                pass

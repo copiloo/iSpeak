@@ -15,6 +15,7 @@ from text_processor import TextProcessor
 from text_injector import TextInjector
 from hotkey_controller import HotkeyController
 from context_detector import ContextDetector
+from overlay_widget import OverlayWidget
 
 
 class iSpeakApp(QObject):
@@ -47,12 +48,16 @@ class iSpeakApp(QObject):
 
         self.tray_icon = self._create_tray_icon()
 
+        # Create status overlay
+        self.overlay = OverlayWidget()
+
         print("iSpeak initialized!")
 
     def start_dictation(self):
         """Called when hotkey pressed"""
         print("🎤 Recording started...")
         self.tray_icon.setToolTip("🎤 Recording...")
+        QTimer.singleShot(0, self.overlay.show_listening)
         self.audio.start_recording()
 
     def stop_dictation(self):
@@ -71,6 +76,7 @@ class iSpeakApp(QObject):
         if len(audio_data) < 1600:  # Less than 0.1 seconds
             print("❌ Recording too short, ignoring (hold key longer)")
             self.tray_icon.setToolTip("✅ Ready")
+            QTimer.singleShot(0, self.overlay.hide_overlay)
             return
 
         # Process in background thread
@@ -94,6 +100,9 @@ class iSpeakApp(QObject):
         self.transcription_thread.finished.connect(self.transcription_thread.deleteLater)
         self.transcription_thread.start()
 
+        # Show processing animation
+        QTimer.singleShot(0, self.overlay.show_processing)
+
     @pyqtSlot(bool, str)
     def _on_transcription_done(self, success: bool, text: str = ""):
         """Called when transcription completes"""
@@ -113,6 +122,9 @@ class iSpeakApp(QObject):
         print(f"[Main] Resetting is_processing flag")
         self.is_processing = False
         print(f"[Main] is_processing = {self.is_processing}")
+
+        # Hide the overlay
+        QTimer.singleShot(0, self.overlay.hide_overlay)
 
     def _inject_text(self, text: str):
         """Inject text - called via QTimer to avoid blocking"""
@@ -244,7 +256,7 @@ class iSpeakApp(QObject):
         icon = QSystemTrayIcon()
 
         # Try to load icon file, fallback to text
-        icon_path = "resources/icon.png"
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icon.png")
         if os.path.exists(icon_path):
             icon.setIcon(QIcon(icon_path))
         else:
