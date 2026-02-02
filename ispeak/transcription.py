@@ -227,6 +227,50 @@ class TranscriptionEngine:
         self.model_size = model_size
         self._load_model(model_size)
 
+    def transcribe_interim(self, audio_data, language=None):
+        """
+        Fast transcription for interim/streaming results.
+
+        Uses faster settings (lower beam size, no VAD) for quick feedback.
+        Quality may be slightly lower than full transcribe().
+
+        Args:
+            audio_data: numpy array of audio samples (float32, 16kHz)
+            language: language code or None
+
+        Returns:
+            str: transcribed text (just the text, no metadata)
+        """
+        if language is None:
+            language = self.current_language
+
+        try:
+            if self.backend == "mlx":
+                result = mlx_whisper.transcribe(
+                    audio_data,
+                    path_or_hf_repo=self.mlx_model_path,
+                    language=language,
+                    beam_size=1,  # Fastest beam search
+                    condition_on_previous_text=False,
+                    fp16=True,
+                )
+                return result.get("text", "").strip()
+            else:
+                # faster-whisper with speed-optimized settings
+                segments, _ = self.model.transcribe(
+                    audio_data,
+                    language=language,
+                    beam_size=1,  # Fastest
+                    vad_filter=False,  # Skip VAD for speed
+                    condition_on_previous_text=False,
+                    without_timestamps=True,  # Skip timestamp calculation
+                )
+                text = " ".join([segment.text for segment in segments])
+                return text.strip()
+        except Exception as e:
+            print(f"[Transcription] Interim transcription error: {e}")
+            return ""
+
     def get_backend_info(self):
         """Get information about the current backend."""
         return {
