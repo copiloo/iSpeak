@@ -1,10 +1,17 @@
 # Core dependencies
 faster-whisper>=0.10.0          # Fast Whisper implementation (fallback)
-pyaudio>=0.2.13                 # Audio capture
+pyaudio>=0.2.13                 # Audio capture (see INSTALL notes for macOS)
 pynput>=1.7.6                   # Keyboard control & hotkeys
 pyperclip>=1.8.2                # Clipboard operations
 PyQt6>=6.6.0                    # GUI framework for tray icon
 numpy>=1.24.0                   # Audio processing
+
+# NOTE for macOS users:
+# PyAudio requires PortAudio to be installed via Homebrew.
+# For automatic setup, run: ./setup.sh
+# For manual installation:
+#   1. brew install portaudio
+#   2. CFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" pip install --no-binary :all: pyaudio
 
 # macOS-specific (only on macOS)
 pyobjc-framework-Cocoa>=10.0 ; sys_platform == 'darwin'

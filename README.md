@@ -40,24 +40,61 @@ python prototype.py
 
 ### Full Installation
 
+#### Automated Setup (Recommended for macOS)
+
 1. **Clone the repository**
    ```bash
    git clone <your-repo-url>
    cd iSpeak
    ```
 
-2. **Create a virtual environment**
+2. **Run the setup script**
+   ```bash
+   ./setup.sh
+   ```
+
+This will automatically:
+- Install PortAudio via Homebrew
+- Create a virtual environment
+- Install all dependencies with proper macOS configuration
+- Verify the installation
+
+3. **Run the application**
+   ```bash
+   source venv/bin/activate
+   cd ispeak
+   python main.py
+   ```
+
+#### Manual Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd iSpeak
+   ```
+
+2. **Install PortAudio (macOS only)**
+   ```bash
+   brew install portaudio
+   ```
+
+3. **Create a virtual environment**
    ```bash
    python3 -m venv venv
-   source venv/bin/activate  # On macOS/Linux
+   source venv/bin/activate
    ```
 
-3. **Install dependencies**
+4. **Install dependencies**
    ```bash
-   pip install -r requirements.txt
+   # Install all dependencies except PyAudio
+   grep -v "pyaudio" requirements.txt | pip install -r /dev/stdin
+
+   # Install PyAudio with proper flags for macOS
+   CFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" pip install --no-binary :all: pyaudio
    ```
 
-4. **Run the application**
+5. **Run the application**
    ```bash
    cd ispeak
    python main.py
