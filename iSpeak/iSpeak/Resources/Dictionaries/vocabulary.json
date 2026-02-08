@@ -1,1 +1,14 @@
-/Users/icoroiu/Documents/-Learn/iSpeak/resources/vocabulary.json
+{
+  "gonna": "going to",
+  "wanna": "want to",
+  "gotta": "got to",
+  "shoulda": "should have",
+  "woulda": "would have",
+  "coulda": "could have",
+  "ok": "OK",
+  "i d": "ID",
+  "u r l": "URL",
+  "a p i": "API",
+  "h t t p": "HTTP",
+  "h t t p s": "HTTPS"
+}

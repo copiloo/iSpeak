@@ -34,9 +34,22 @@
 		0D45525B2F363C09001ABB62 /* iSpeakUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iSpeakUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0DD74AE02F365000003753C7 /* Exceptions for "iSpeak" folder in "iSpeak" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0D4552432F363C07001ABB62 /* iSpeak */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0D4552462F363C07001ABB62 /* iSpeak */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0DD74AE02F365000003753C7 /* Exceptions for "iSpeak" folder in "iSpeak" target */,
+			);
 			path = iSpeak;
 			sourceTree = "<group>";
 		};
@@ -410,8 +423,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5DRZ929F74;
-				ENABLE_APP_SANDBOX = YES;
+				DEVELOPMENT_TEAM = A6F8NJU9F3;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -464,8 +477,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5DRZ929F74;
-				ENABLE_APP_SANDBOX = YES;
+				DEVELOPMENT_TEAM = A6F8NJU9F3;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;

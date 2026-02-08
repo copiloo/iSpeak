@@ -17,7 +17,7 @@ This guide covers the remaining manual Xcode configuration steps to complete Pha
 
 **Important:** The files we created are on disk but not yet added to the Xcode project.
 
-1. Open Xcode and load the project: `/Users/icoroiu/Documents/-Learn/iSpeak-Swift/iSpeak/iSpeak.xcodeproj`
+1. Open Xcode and load the project: `/Users/kid/Documents/MyProjects/Development projects/MERNProjects/iSpeak-Swift/iSpeak/iSpeak.xcodeproj`
 
 2. In Project Navigator (left sidebar), **delete** the old `iSpeakApp.swift` reference if it exists at the root level (it will show in red as missing)
 
