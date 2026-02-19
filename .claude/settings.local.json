@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip --version:*)",
+      "Bash(py:*)",
+      "Bash(where:*)",
+      "Bash(winget:*)",
+      "Bash(choco:*)",
+      "Bash(cmd.exe /c \"where python\")",
+      "Bash(cmd.exe /c \"python --version\")",
+      "Bash(\"/c/Users/copiloo/AppData/Local/Programs/Python/Python311/python.exe\" --version)",
+      "Bash(\"/c/Users/copiloo/AppData/Local/Programs/Python/Python311/python.exe\" -m pip --version)",
+      "Bash(PYTHON=\"/c/Users/copiloo/AppData/Local/Programs/Python/Python311/python.exe\":*)",
+      "Bash(\"$PYTHON\" -m venv \"/d/MyProjects/VibeCoding/iSpeak/venv\")",
+      "Bash(PIP=\"/d/MyProjects/VibeCoding/iSpeak/venv/Scripts/pip.exe\")",
+      "Bash(\"$PIP\" install --upgrade pip)",
+      "Bash(PYTHON=\"/d/MyProjects/VibeCoding/iSpeak/venv/Scripts/python.exe\":*)",
+      "Bash(\"$PYTHON\" -m pip install --upgrade pip)",
+      "Bash(\"$PYTHON\" -m pip install \"faster-whisper>=0.10.0\" \"pynput>=1.7.6\" \"pyperclip>=1.8.2\" \"PyQt6>=6.6.0\" \"numpy>=1.24.0\")",
+      "Bash(\"$PYTHON\" -m pip install \"pyaudio>=0.2.13\")",
+      "Bash(\"$PYTHON\" -c \":*)",
+      "Bash(gh repo rename:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh repo create:*)"
+    ]
+  }
+}
