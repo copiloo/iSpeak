@@ -1,16 +1,37 @@
 # ispeak/text_processor.py
 
 import re
-from typing import Dict, List
-import json
 import os
+import json
+from typing import Dict
+
+# Pre-built static regex for whitespace cleanup (compiled once at module level)
+_RE_MULTI_SPACE = re.compile(r'\s+')
+_RE_SPACE_BEFORE_PUNCT = re.compile(r'\s+([,.;:!?])')
+_RE_PUNCT_NO_SPACE = re.compile(r'([,.;:!?])([A-Za-z])')
+_RE_IF_EQUALS = re.compile(r'\bif\s+(\w+)\s+equals\s+(\w+)\b', re.IGNORECASE)
+_RE_FOR_IN_RANGE = re.compile(r'\bfor\s+(\w+)\s+in\s+range\b', re.IGNORECASE)
+_RE_DEF = re.compile(r'\bdef\s+(\w+)', re.IGNORECASE)
+
+
+def _build_pattern_list(mapping: dict) -> list:
+    """Compile a dict of {spoken: written} into a list of (pattern, replacement)."""
+    return [
+        (re.compile(r'\b' + re.escape(k) + r'\b', re.IGNORECASE), v)
+        for k, v in mapping.items()
+    ]
+
 
 class TextProcessor:
-    def __init__(self, vocabulary_file="resources/vocabulary.json"):
+    def __init__(self, vocabulary_file=None):
+        # Resolve vocabulary path relative to this file so it works regardless of cwd
+        if vocabulary_file is None:
+            _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            vocabulary_file = os.path.join(_base, "resources", "vocabulary.json")
         self.vocabulary_file = vocabulary_file
 
         # Custom vocabulary for Romanian tech terms
-        self.vocabulary = {
+        self._vocabulary_map = {
             "git hub": "GitHub",
             "vis code": "VS Code",
             "visual studio code": "VS Code",
@@ -20,11 +41,10 @@ class TextProcessor:
             "funk ție": "funcție",
             "vari abilă": "variabilă",
             "no duri": "noduri",
-            # Add more as users report issues
         }
 
         # Code patterns (voice commands for coding)
-        self.code_patterns = {
+        self._code_map = {
             "new line": "\n",
             "tab": "\t",
             "open brace": " {",
@@ -47,24 +67,14 @@ class TextProcessor:
         }
 
         # Romanian autocorrect (common diacritics issues)
-        self.romanian_corrections = {
-            # Function/Method
+        self._romanian_map = {
             "functie": "funcție",
             "functii": "funcții",
             "functia": "funcția",
             "metoda": "metodă",
-            "metode": "metode",
             "metodă": "metodă",
-
-            # Variables
             "variabila": "variabilă",
-            "variabile": "variabile",
-
-            # Class
             "clasa": "clasă",
-            "clase": "clase",
-
-            # Common programming terms
             "pentru": "pentru",
             "intrare": "intrare",
             "iesire": "ieșire",
@@ -76,7 +86,6 @@ class TextProcessor:
             "rezultat": "rezultat",
             "rezultate": "rezultate",
             "lista": "listă",
-            "liste": "liste",
             "dictionar": "dicționar",
             "dictionare": "dicționare",
             "conditie": "condiție",
@@ -100,112 +109,90 @@ class TextProcessor:
             "initializeaza": "inițializează",
         }
 
-        # Load custom vocabulary if exists
+        # Load custom vocabulary from file (merges into _vocabulary_map)
         self._load_vocabulary()
 
+        # Compile all patterns once
+        self._vocab_patterns = _build_pattern_list(self._vocabulary_map)
+        self._code_patterns = _build_pattern_list(self._code_map)
+        self._romanian_patterns = _build_pattern_list(self._romanian_map)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def process(self, text: str, context: Dict = None) -> str:
-        """
-        Process transcribed text
-        context: dict with 'app_name', 'file_type', etc.
-        """
         if not text:
             return ""
 
-        # 1. Apply custom vocabulary
-        text = self._apply_vocabulary(text)
+        text = self._apply_patterns(text, self._vocab_patterns)
 
-        # 2. If in code editor, apply code formatting
         if context and self._is_code_context(context):
             text = self._apply_code_formatting(text)
 
-        # 3. Romanian-specific corrections
-        text = self._apply_romanian_corrections(text)
-
-        # 4. Clean up extra spaces
+        text = self._apply_patterns(text, self._romanian_patterns)
         text = self._cleanup_whitespace(text)
-
         return text
 
-    def _apply_vocabulary(self, text: str) -> str:
-        """Replace custom vocabulary"""
-        for wrong, right in self.vocabulary.items():
-            # Case-insensitive replacement
-            pattern = re.compile(re.escape(wrong), re.IGNORECASE)
-            text = pattern.sub(right, text)
+    def add_custom_word(self, spoken: str, written: str):
+        """Add a custom vocabulary entry and recompile patterns."""
+        self._vocabulary_map[spoken.lower()] = written
+        # Recompile only the vocabulary patterns
+        self._vocab_patterns = _build_pattern_list(self._vocabulary_map)
+        self._save_vocabulary()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_patterns(text: str, patterns: list) -> str:
+        for pattern, replacement in patterns:
+            text = pattern.sub(replacement, text)
         return text
 
     def _is_code_context(self, context: Dict) -> bool:
-        """Detect if user is in a code editor"""
-        code_apps = ['Code', 'VS Code', 'PyCharm', 'Cursor', 'Sublime',
-                     'IntelliJ', 'WebStorm', 'Atom', 'Xcode']
+        code_apps = ['Code', 'VS Code', 'PyCharm', 'pycharm', 'Cursor', 'Sublime',
+                     'IntelliJ', 'idea', 'WebStorm', 'webstorm', 'Atom', 'Xcode', 'Fleet']
         code_extensions = ['.py', '.js', '.ts', '.java', '.cpp', '.go',
-                          '.rb', '.php', '.swift', '.kt', '.rs']
+                           '.rb', '.php', '.swift', '.kt', '.rs']
 
         app_name = context.get('app_name', '')
         file_type = context.get('file_type', '')
 
-        return (any(app in app_name for app in code_apps) or
+        return (any(app.lower() in app_name.lower() for app in code_apps) or
                 any(file_type.endswith(ext) for ext in code_extensions))
 
     def _apply_code_formatting(self, text: str) -> str:
-        """Apply code-specific formatting"""
-        # Replace code patterns
-        for spoken, written in self.code_patterns.items():
-            # Use word boundaries to avoid partial matches
-            pattern = r'\b' + re.escape(spoken) + r'\b'
-            text = re.sub(pattern, written, text, flags=re.IGNORECASE)
-
-        # Handle common code phrases
-        text = re.sub(r'\bif\s+(\w+)\s+equals\s+(\w+)\b',
-                      r'if \1 == \2', text, flags=re.IGNORECASE)
-        text = re.sub(r'\bfor\s+(\w+)\s+in\s+range\b',
-                      r'for \1 in range', text, flags=re.IGNORECASE)
-        text = re.sub(r'\bdef\s+(\w+)', r'def \1', text, flags=re.IGNORECASE)
-
+        text = self._apply_patterns(text, self._code_patterns)
+        text = _RE_IF_EQUALS.sub(r'if \1 == \2', text)
+        text = _RE_FOR_IN_RANGE.sub(r'for \1 in range', text)
+        text = _RE_DEF.sub(r'def \1', text)
         return text
 
-    def _apply_romanian_corrections(self, text: str) -> str:
-        """Fix Romanian diacritics that might be missing"""
-        for wrong, right in self.romanian_corrections.items():
-            # Only replace whole words
-            pattern = r'\b' + re.escape(wrong) + r'\b'
-            text = re.sub(pattern, right, text, flags=re.IGNORECASE)
-        return text
-
-    def _cleanup_whitespace(self, text: str) -> str:
-        """Remove extra spaces and fix punctuation spacing"""
-        # Multiple spaces -> single space
-        text = re.sub(r'\s+', ' ', text)
-
-        # Remove space before punctuation
-        text = re.sub(r'\s+([,.;:!?])', r'\1', text)
-
-        # Add space after punctuation (if missing)
-        text = re.sub(r'([,.;:!?])([A-Za-z])', r'\1 \2', text)
-
+    @staticmethod
+    def _cleanup_whitespace(text: str) -> str:
+        text = _RE_MULTI_SPACE.sub(' ', text)
+        text = _RE_SPACE_BEFORE_PUNCT.sub(r'\1', text)
+        text = _RE_PUNCT_NO_SPACE.sub(r'\1 \2', text)
         return text.strip()
 
-    def add_custom_word(self, spoken: str, written: str):
-        """Allow users to add custom vocabulary"""
-        self.vocabulary[spoken.lower()] = written
-        self._save_vocabulary()
-
     def _load_vocabulary(self):
-        """Load custom vocabulary from file"""
         if os.path.exists(self.vocabulary_file):
             try:
                 with open(self.vocabulary_file, 'r', encoding='utf-8') as f:
                     custom = json.load(f)
-                    self.vocabulary.update(custom)
+                    self._vocabulary_map.update(custom)
                 print(f"Loaded {len(custom)} custom vocabulary entries")
             except Exception as e:
                 print(f"Error loading vocabulary: {e}")
 
     def _save_vocabulary(self):
-        """Save custom vocabulary to file"""
         try:
-            os.makedirs(os.path.dirname(self.vocabulary_file), exist_ok=True)
+            vocab_dir = os.path.dirname(self.vocabulary_file)
+            if vocab_dir:
+                os.makedirs(vocab_dir, exist_ok=True)
             with open(self.vocabulary_file, 'w', encoding='utf-8') as f:
-                json.dump(self.vocabulary, f, indent=2, ensure_ascii=False)
+                json.dump(self._vocabulary_map, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving vocabulary: {e}")

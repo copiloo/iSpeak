@@ -1,24 +1,24 @@
 # ispeak/hotkey_controller.py
 
+import sys
 from pynput import keyboard
 import threading
 
 class HotkeyController:
     def __init__(self, on_start_callback, on_stop_callback):
-        """
-        Initialize hotkey controller
-        on_start_callback: function to call when hotkey pressed
-        on_stop_callback: function to call when hotkey released
-        """
         self.on_start = on_start_callback
         self.on_stop = on_stop_callback
 
         self.is_recording = False
-        self._state_lock = threading.Lock()  # Protect is_recording from race conditions
+        self._state_lock = threading.Lock()
 
-        # Default hotkey: Right Option (Alt) key
-        # Can be customized by user
-        self.hotkey = keyboard.Key.alt_r
+        # On Windows, use Right Ctrl — Right Alt (AltGr) activates menu bars in
+        # Electron apps (VS Code, Slack, etc.) on key release, stealing editor focus.
+        # On macOS, Right Alt is safe (no menu activation behaviour).
+        if sys.platform == "win32":
+            self.hotkey = keyboard.Key.ctrl_r
+        else:
+            self.hotkey = keyboard.Key.alt_r
 
         self.listener = None
 
@@ -38,25 +38,26 @@ class HotkeyController:
             self.listener.stop()
             print("Hotkey listener stopped.")
 
+    def _matches(self, key) -> bool:
+        return key == self.hotkey
+
     def _on_press(self, key):
-        """Called when any key is pressed"""
         try:
-            if key == self.hotkey:
+            if self._matches(key):
                 with self._state_lock:
                     if not self.is_recording:
                         self.is_recording = True
-                        self.on_start()  # Start recording
+                        self.on_start()
         except Exception as e:
             print(f"Error in key press handler: {e}")
 
     def _on_release(self, key):
-        """Called when any key is released"""
         try:
-            if key == self.hotkey:
+            if self._matches(key):
                 with self._state_lock:
                     if self.is_recording:
                         self.is_recording = False
-                        self.on_stop()  # Stop recording and transcribe
+                        self.on_stop()
         except Exception as e:
             print(f"Error in key release handler: {e}")
 

@@ -8,7 +8,6 @@ from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor
 from PyQt6.QtCore import QThread, pyqtSignal, QObject, pyqtSlot, QTimer
 import time
 
-# Import our modules
 from audio_capture import AudioCapture
 from transcription import TranscriptionEngine
 from text_processor import TextProcessor
@@ -16,16 +15,34 @@ from text_injector import TextInjector
 from hotkey_controller import HotkeyController
 from context_detector import ContextDetector
 from overlay_widget import OverlayWidget
+from settings_dialog import SettingsDialog
+import settings_manager
+
+
+def _set_console_visible(visible: bool):
+    """Show or hide the Windows console window at runtime."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    if hwnd:
+        ctypes.windll.user32.ShowWindow(hwnd, 5 if visible else 0)
 
 
 class iSpeakApp(QObject):
+    # Used to safely hand audio data from pynput's listener thread to the Qt main thread
+    _audio_ready = pyqtSignal(object)
+
     def __init__(self):
         super().__init__()
-        # Initialize components
         print("Initializing iSpeak...")
 
+        # Load persisted settings first
+        self._settings = settings_manager.load()
+        _set_console_visible(self._settings.get("show_debug_console", False))
+
         self.audio = AudioCapture()
-        self.transcriber = TranscriptionEngine(model_size="small")  # Better Romanian accuracy
+        self.transcriber = None          # loaded async after tray appears
         self.processor = TextProcessor()
         self.injector = TextInjector()
         self.hotkey = HotkeyController(
@@ -34,19 +51,19 @@ class iSpeakApp(QObject):
         )
         self.context = ContextDetector()
 
-        # State
-        self.current_language = "en"
-        self.current_model = "small"  # Track current model
-        self.auto_press_enter = False  # Auto-press Enter after dictation
-        self.is_processing = False
-        self.transcription_thread = None
-        self.model_download_thread = None
+        # State — seeded from saved settings
+        self.current_language = self._settings.get("language", "en")
+        self.current_model = self._settings.get("model", "small")
+        self.auto_press_enter = self._settings.get("auto_enter", False)
+        self.is_processing = True        # Block dictation until model is ready
 
-        # UI (System tray)
-        self.app = QApplication(sys.argv)
-        self.app.setQuitOnLastWindowClosed(False)  # Keep running in background
+        # Threads — kept as instance vars to prevent premature GC; replaced on each use
+        self._transcription_thread = None
+        self._model_load_thread = None
+        self._target_hwnd = None        # Top-level window before recording
+        self._target_focus_hwnd = None  # Focused child control before recording
 
-        # Hide from Dock on macOS (menu bar only)
+        # Hide from Dock on macOS
         if sys.platform == "darwin":
             try:
                 from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
@@ -55,26 +72,33 @@ class iSpeakApp(QObject):
             except Exception as e:
                 print(f"Warning: Could not hide Dock icon: {e}")
 
-        self.tray_icon = self._create_tray_icon()
+        # Bridge pynput listener thread → Qt main thread for delayed focus capture
+        self._audio_ready.connect(self._on_audio_ready_qt)
 
-        # Create status overlay
+        # Show tray icon FIRST — model loads in background after event loop starts
+        self.tray_icon = self._create_tray_icon()
         self.overlay = OverlayWidget()
 
-        print("iSpeak initialized!")
+        print("iSpeak tray icon ready. Loading model in background...")
+
+    # ------------------------------------------------------------------
+    # Dictation lifecycle
+    # ------------------------------------------------------------------
 
     def start_dictation(self):
-        """Called when hotkey pressed"""
-        print("🎤 Recording started...")
+        if self.transcriber is None or self.is_processing:
+            print("⚠️  Model not ready yet, please wait...")
+            return
+        # Capture focus NOW — user is in their target window at press time.
+        # pynput hooks fire before the app processes Alt, so child focus is still correct.
+        from text_injector import get_focus_info
+        self._target_hwnd, self._target_focus_hwnd = get_focus_info()
+        print(f"🎤 Recording started...")
         self.tray_icon.setToolTip("🎤 Recording...")
-
-        # Start audio recording
         self.audio.start_recording()
-
-        # Show overlay
         QTimer.singleShot(0, self.overlay.show_listening)
 
     def stop_dictation(self):
-        """Called when hotkey released"""
         if self.is_processing:
             print("⚠️  Already processing, please wait...")
             return
@@ -82,241 +106,265 @@ class iSpeakApp(QObject):
         print("⏸️  Recording stopped, transcribing...")
         self.tray_icon.setToolTip("⏳ Transcribing...")
 
-        # Get audio data
         audio_data = self.audio.stop_recording()
 
-        # Check if we have audio (4800 samples = 0.3 seconds at 16kHz)
-        if len(audio_data) < 4800:  # Less than 0.3 seconds
-            print("❌ Recording too short, ignoring (hold key longer)")
+        if len(audio_data) < 4800:  # < 0.3 seconds at 16kHz
+            print("❌ Recording too short, ignoring")
             self.tray_icon.setToolTip("✅ Ready")
             QTimer.singleShot(0, self.overlay.hide_overlay)
             return
 
-        # Process in background thread
         self.is_processing = True
+        QTimer.singleShot(0, self.overlay.show_processing)
 
-        # Clean up previous thread if exists
-        if self.transcription_thread is not None:
-            if self.transcription_thread.isRunning():
-                self.transcription_thread.wait(1000)  # Wait max 1 second
-            self.transcription_thread.deleteLater()
+        # Emit signal to hand audio data to the Qt main thread.
+        # Can't use QTimer.singleShot(150, ...) directly here because stop_dictation()
+        # runs in pynput's listener thread which has no Qt event dispatcher.
+        self._audio_ready.emit(audio_data)
 
-        self.transcription_thread = TranscriptionThread(
+    @pyqtSlot(object)
+    def _on_audio_ready_qt(self, audio_data):
+        """Runs in Qt main thread. Focus was already captured at press time."""
+        self._start_transcription_thread(audio_data)
+
+    def _start_transcription_thread(self, audio_data):
+        """Safely replace the transcription thread."""
+        old = self._transcription_thread
+        if old is not None:
+            try:
+                old.finished.disconnect()
+                if old.isRunning():
+                    old.wait(2000)
+                old.deleteLater()
+            except RuntimeError:
+                pass  # C++ object already deleted — safe to ignore
+
+        thread = TranscriptionThread(
             audio_data,
             self.transcriber,
             self.processor,
-            self.injector,
             self.context,
-            self.current_language
+            self.current_language,
         )
-        self.transcription_thread.finished.connect(self._on_transcription_done)
-        self.transcription_thread.finished.connect(self.transcription_thread.deleteLater)
-        self.transcription_thread.start()
-
-        # Show processing animation
-        QTimer.singleShot(0, self.overlay.show_processing)
+        thread.finished.connect(self._on_transcription_done)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+        self._transcription_thread = thread
 
     @pyqtSlot(bool, str)
     def _on_transcription_done(self, success: bool, text: str = ""):
-        """Called when transcription completes"""
-        print(f"[Main] _on_transcription_done called: success={success}, text_length={len(text) if text else 0}")
+        # Clear the reference now — the thread's deleteLater() fires after this slot
+        # returns (connected second). Keeping the reference would leave a dangling
+        # C++ pointer that crashes on the next isRunning() / disconnect() call.
+        self._transcription_thread = None
+        print(f"[Main] Transcription done: success={success}, len={len(text) if text else 0}")
 
         if success and text:
-            # Use QTimer to delay text injection slightly
-            # This prevents interference with the hotkey listener
-            print(f"[Main] Scheduling text injection in 100ms...")
             QTimer.singleShot(100, lambda: self._inject_text(text))
             self.tray_icon.setToolTip("✅ Ready")
         else:
-            print("[Main] ❌ Transcription failed")
+            print("[Main] ❌ Transcription failed or empty")
             self.tray_icon.setToolTip("❌ Error - Ready")
 
-        # Always reset processing flag at the end
-        print(f"[Main] Resetting is_processing flag")
         self.is_processing = False
-        print(f"[Main] is_processing = {self.is_processing}")
-
-        # Hide the overlay
         QTimer.singleShot(0, self.overlay.hide_overlay)
 
     def _inject_text(self, text: str):
-        """Inject text - called via QTimer to avoid blocking"""
         try:
-            print(f"[Main] Starting text injection...")
-            self.injector.type_text(text, instant=True)
-            print(f"[Main] ✅ Text inserted: '{text[:50]}{'...' if len(text) > 50 else ''}'")
+            from text_injector import is_hwnd_valid, get_focus_info
 
-            # Auto-press Enter if enabled
+            target_hwnd = self._target_hwnd
+            target_focus_hwnd = self._target_focus_hwnd
+
+            # If the target window was closed during transcription, fall back
+            if not is_hwnd_valid(target_hwnd):
+                print("[Main] Stored target window is no longer valid, using current foreground")
+                target_hwnd, target_focus_hwnd = get_focus_info()
+
+            self.injector.type_text(text, instant=True,
+                                    target_hwnd=target_hwnd,
+                                    target_focus_hwnd=target_focus_hwnd)
+            print(f"[Main] ✅ Inserted: '{text[:50]}{'...' if len(text) > 50 else ''}'")
             if self.auto_press_enter:
-                print(f"[Main] Auto-pressing Enter...")
                 QTimer.singleShot(100, lambda: self.injector.press_key('enter'))
         except Exception as e:
             print(f"[Main] ❌ Error injecting text: {e}")
             import traceback
             traceback.print_exc()
 
+    # ------------------------------------------------------------------
+    # Language / model controls
+    # ------------------------------------------------------------------
+
     def toggle_language(self):
-        """Switch between Romanian and English"""
         self.current_language = "en" if self.current_language == "ro" else "ro"
-        print(f"🌐 Language switched to: {self.current_language.upper()}")
+        print(f"🌐 Language: {self.current_language.upper()}")
         self.transcriber.set_language(self.current_language)
         self._update_tray_menu()
 
     def toggle_auto_enter(self):
-        """Toggle auto-press Enter after dictation"""
         self.auto_press_enter = not self.auto_press_enter
-        status = "enabled" if self.auto_press_enter else "disabled"
-        print(f"⏎ Auto-press Enter {status}")
+        print(f"⏎ Auto-press Enter {'enabled' if self.auto_press_enter else 'disabled'}")
         self._update_tray_menu()
 
     def switch_model(self, model_name: str):
-        """Switch to a different Whisper model"""
         if model_name == self.current_model:
-            print(f"Already using {model_name} model")
             return
 
         if self.is_processing:
-            QMessageBox.warning(
-                None,
-                "Model Switch",
-                "Cannot switch models while processing. Please wait and try again."
-            )
+            QMessageBox.warning(None, "Model Switch",
+                                "Cannot switch models while processing.")
             return
 
-        print(f"🔄 Switching model from {self.current_model} to {model_name}...")
-
-        # Show confirmation dialog
+        model_info = {
+            "tiny":   "Fastest, least accurate. ~75MB.",
+            "base":   "Fast, fair accuracy. ~142MB.",
+            "small":  "Balanced. ~466MB. Recommended for Romanian.",
+            "medium": "Slower, excellent accuracy. ~1.5GB.",
+            "large":  "Slowest, best accuracy. ~2.9GB.",
+            "turbo":  "Fast + accurate! ~800MB. Recommended!",
+        }
         msg = QMessageBox()
         msg.setWindowTitle("Switch Model")
         msg.setText(f"Switch to '{model_name}' model?")
-
-        # Add info based on model
-        model_info = {
-            "tiny": "Fastest, least accurate. ~75MB download.",
-            "base": "Fast, fair accuracy. ~142MB download.",
-            "small": "Balanced speed and accuracy. ~466MB download. Recommended for Romanian.",
-            "medium": "Slower, excellent accuracy. ~1.5GB download.",
-            "large": "Slowest, best accuracy. ~2.9GB download.",
-            "turbo": "Fast + accurate! 6x faster than large with ~1% accuracy loss. ~800MB download. Recommended!",
-        }
         msg.setInformativeText(
             f"{model_info.get(model_name, '')}\n\n"
-            "If not downloaded, it will be fetched automatically.\n"
-            "The app will be unavailable during download."
+            "Will download if not cached. App unavailable during download."
         )
         msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
 
-        if msg.exec() == QMessageBox.StandardButton.Ok:
-            # Start model switch in background
-            self.is_processing = True  # Block dictation during switch
-            self.tray_icon.setToolTip(f"📥 Loading {model_name} model...")
-
-            # Clean up previous download thread if exists
-            if self.model_download_thread is not None:
-                if self.model_download_thread.isRunning():
-                    self.model_download_thread.wait(1000)
-                self.model_download_thread.deleteLater()
-
-            self.model_download_thread = ModelLoadThread(model_name)
-            self.model_download_thread.finished.connect(self._on_model_loaded)
-            self.model_download_thread.progress.connect(self._on_model_download_progress)
-            self.model_download_thread.finished.connect(self.model_download_thread.deleteLater)
-            self.model_download_thread.start()
-        else:
-            # User cancelled, update menu to reflect current model
+        if msg.exec() != QMessageBox.StandardButton.Ok:
             self._update_tray_menu()
+            return
+
+        self.is_processing = True
+        self.tray_icon.setToolTip(f"📥 Loading {model_name} model...")
+        self._start_model_load_thread(model_name)
+
+    def _start_model_load_thread(self, model_name: str):
+        """Safely replace the model load thread."""
+        old = self._model_load_thread
+        if old is not None:
+            try:
+                old.finished.disconnect()
+                old.progress.disconnect()
+            except RuntimeError:
+                pass
+            if old.isRunning():
+                old.wait(2000)
+            old.deleteLater()
+
+        thread = ModelLoadThread(model_name)
+        thread.finished.connect(self._on_model_loaded)
+        thread.progress.connect(self._on_model_download_progress)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+        self._model_load_thread = thread
 
     @pyqtSlot(str)
     def _on_model_download_progress(self, message: str):
-        """Update tooltip with download progress"""
         self.tray_icon.setToolTip(message)
         print(message)
 
     @pyqtSlot(bool, str, object)
     def _on_model_loaded(self, success: bool, model_name: str, backend_info: dict):
-        """Called when model loading completes"""
+        is_initial_load = self.transcriber is None
+
         if success:
-            # Update transcriber with new model info
+            if self.transcriber is None:
+                # First load — create the TranscriptionEngine shell and inject the loaded model
+                self.transcriber = TranscriptionEngine.__new__(TranscriptionEngine)
+                self.transcriber.current_language = self.current_language
+                self.transcriber.models_dir = "./models"
+                self.transcriber.use_mlx = False
+                self.transcriber.mlx_model_path = None
+                self.transcriber.model = None
+
             self.transcriber.model_size = model_name
             self.transcriber.backend = backend_info.get("backend", "faster-whisper")
             if backend_info.get("model"):
                 self.transcriber.model = backend_info["model"]
             if backend_info.get("mlx_model_path"):
                 self.transcriber.mlx_model_path = backend_info["mlx_model_path"]
+                self.transcriber.use_mlx = True
             self.current_model = model_name
 
             backend_name = backend_info.get("backend", "faster-whisper").upper()
-            print(f"✅ Model switched to: {model_name} ({backend_name})")
-            self.tray_icon.setToolTip("✅ Ready")
+            print(f"✅ Model ready: {model_name} ({backend_name})")
+            self.tray_icon.setToolTip("iSpeak - Ready")
 
-            # Show success message
-            QMessageBox.information(
-                None,
-                "Model Loaded",
-                f"Successfully switched to '{model_name}' model!\nBackend: {backend_name}"
-            )
+            if not is_initial_load:
+                QMessageBox.information(None, "Model Loaded",
+                                        f"Switched to '{model_name}' model!\nBackend: {backend_name}")
         else:
             print(f"❌ Failed to load {model_name} model")
-            self.tray_icon.setToolTip("❌ Model load failed - Ready")
-
-            # Show error message
-            QMessageBox.critical(
-                None,
-                "Model Load Error",
-                f"Failed to load '{model_name}' model. Still using '{self.current_model}'."
-            )
+            self.tray_icon.setToolTip("iSpeak - Model load failed")
+            QMessageBox.critical(None, "Model Load Error",
+                                 f"Failed to load '{model_name}'.")
 
         self.is_processing = False
         self._update_tray_menu()
 
+    # ------------------------------------------------------------------
+    # Tray UI
+    # ------------------------------------------------------------------
+
+    def _resource_path(self, relative_path: str) -> str:
+        """Resolve a resource path that works both from source and PyInstaller frozen exe."""
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running as PyInstaller bundle — resources are in _MEIPASS
+            base = sys._MEIPASS
+        else:
+            # Running from source — resources are one level up from ispeak/
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base, relative_path)
+
     def _create_tray_icon(self):
-        """Create system tray menu"""
-        # Create icon
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            print("ERROR: System tray not available on this system.")
+
         icon = QSystemTrayIcon()
 
-        # Try to load icon file, fallback to text
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icon.png")
+        icon_path = self._resource_path(os.path.join("resources", "icon.png"))
         if os.path.exists(icon_path):
             icon.setIcon(QIcon(icon_path))
         else:
-            # Create a simple default icon
+            # Fallback: draw a simple colored circle
             pixmap = QPixmap(64, 64)
             pixmap.fill(QColor(0, 0, 0, 0))
             painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setBrush(QColor(70, 130, 180))
+            painter.setPen(QColor(0, 0, 0, 0))
             painter.drawEllipse(8, 8, 48, 48)
             painter.end()
             icon.setIcon(QIcon(pixmap))
 
-        icon.setToolTip("iSpeak - Ready")
-
-        # Create menu directly here (will be updated later)
-        menu = self._create_menu()
-        icon.setContextMenu(menu)
-
+        icon.setToolTip("iSpeak - Loading...")
+        icon.setContextMenu(self._build_menu())
         icon.show()
         return icon
 
-    def _create_menu(self):
-        """Create the context menu"""
+    def _build_menu(self):
+        """Build a fresh context menu (called once per update)."""
         menu = QMenu()
 
-        # Status
-        status_action = menu.addAction(f"Language: {self.current_language.upper()}")
-        status_action.setEnabled(False)
+        status = menu.addAction(f"Language: {self.current_language.upper()}")
+        status.setEnabled(False)
 
-        backend_info = self.transcriber.get_backend_info()
-        backend_label = "MLX" if backend_info['using_mlx'] else "FW"
-        model_status_action = menu.addAction(f"Model: {self.current_model} ({backend_label})")
-        model_status_action.setEnabled(False)
+        if self.transcriber is not None:
+            backend_info = self.transcriber.get_backend_info()
+            backend_label = "MLX" if backend_info['using_mlx'] else "FW"
+            model_status = menu.addAction(f"Model: {self.current_model} ({backend_label})")
+        else:
+            model_status = menu.addAction(f"Model: {self.current_model} (loading...)")
+        model_status.setEnabled(False)
 
         menu.addSeparator()
 
-        # Language toggle
         lang_action = menu.addAction("Toggle Language (RO ⇄ EN)")
         lang_action.triggered.connect(self.toggle_language)
 
-        # Auto-press Enter toggle
         auto_enter_action = menu.addAction("Auto-Press Enter After Dictation")
         auto_enter_action.setCheckable(True)
         auto_enter_action.setChecked(self.auto_press_enter)
@@ -324,138 +372,164 @@ class iSpeakApp(QObject):
 
         menu.addSeparator()
 
-        # Model selection submenu
         model_menu = menu.addMenu("Select Model")
-
         models = [
-            ("turbo", "Turbo (fast + accurate) ⭐ NEW"),
-            ("tiny", "Tiny (fastest, least accurate)"),
-            ("base", "Base (fast, fair accuracy)"),
-            ("small", "Small (balanced)"),
+            ("turbo",  "Turbo (fast + accurate) ⭐ NEW"),
+            ("tiny",   "Tiny (fastest, least accurate)"),
+            ("base",   "Base (fast, fair accuracy)"),
+            ("small",  "Small (balanced)"),
             ("medium", "Medium (slow, excellent)"),
-            ("large", "Large (very slow, best)")
+            ("large",  "Large (very slow, best)"),
         ]
-
         for model_name, description in models:
             action = model_menu.addAction(description)
             action.setCheckable(True)
             action.setChecked(model_name == self.current_model)
             action.triggered.connect(lambda checked, m=model_name: self.switch_model(m))
 
-        # Settings (placeholder)
         settings_action = menu.addAction("Settings...")
         settings_action.triggered.connect(self._open_settings)
 
         menu.addSeparator()
 
-        # About
         about_action = menu.addAction("About iSpeak")
         about_action.triggered.connect(self._show_about)
 
-        # Quit
         quit_action = menu.addAction("Quit")
         quit_action.triggered.connect(self.quit)
 
         return menu
 
     def _update_tray_menu(self):
-        """Update tray menu (called after language change)"""
-        menu = self._create_menu()
-        self.tray_icon.setContextMenu(menu)
+        """Replace the tray context menu, deleting the old one."""
+        old_menu = self.tray_icon.contextMenu()
+        new_menu = self._build_menu()
+        self.tray_icon.setContextMenu(new_menu)
+        if old_menu is not None:
+            old_menu.deleteLater()
 
     def _open_settings(self):
-        """Open settings dialog (placeholder)"""
-        print("Settings dialog - TODO")
-        # TODO: Create settings window with:
-        # - Model size selection
-        # - Hotkey customization
-        # - Custom vocabulary editor
-        # - Language preferences
+        current = {
+            "language": self.current_language,
+            "model": self.current_model,
+            "auto_enter": self.auto_press_enter,
+            "show_debug_console": self._settings.get("show_debug_console", False),
+        }
+        dlg = SettingsDialog(current)
+        if dlg.exec() != SettingsDialog.DialogCode.Accepted:
+            return
+
+        new = dlg.get_settings()
+
+        # Apply language change
+        if new["language"] != self.current_language:
+            self.current_language = new["language"]
+            if self.transcriber:
+                self.transcriber.set_language(self.current_language)
+
+        # Apply model change
+        if new["model"] != self.current_model:
+            self.switch_model(new["model"])
+
+        # Apply auto-enter
+        self.auto_press_enter = new["auto_enter"]
+
+        # Apply debug console visibility immediately
+        if new["show_debug_console"] != self._settings.get("show_debug_console", False):
+            _set_console_visible(new["show_debug_console"])
+
+        self._settings.update(new)
+        settings_manager.save(self._settings)
+        self._update_tray_menu()
 
     def _show_about(self):
-        """Show about dialog"""
-        backend_info = self.transcriber.get_backend_info()
-        backend_str = backend_info['backend'].upper()
-        if backend_info['using_mlx']:
-            backend_str += " (Apple Silicon optimized)"
+        if self.transcriber is not None:
+            backend_info = self.transcriber.get_backend_info()
+            backend_str = backend_info['backend'].upper()
+            if backend_info['using_mlx']:
+                backend_str += " (Apple Silicon optimized)"
+        else:
+            backend_str = "Loading..."
 
         msg = QMessageBox()
         msg.setWindowTitle("About iSpeak")
-        msg.setText("iSpeak v0.3.0\n\n"
-                   "Offline voice dictation for developers\n\n"
-                   "Press Right Alt to start dictating.\n"
-                   f"Language: {self.current_language.upper()}\n"
-                   f"Model: {self.current_model}\n"
-                   f"Backend: {backend_str}\n\n"
-                   "Your voice never leaves your Mac.")
+        msg.setText(
+            "iSpeak v0.3.0\n\n"
+            "Offline voice dictation for developers\n\n"
+            "Press Right Ctrl to start dictating.\n"
+            f"Language: {self.current_language.upper()}\n"
+            f"Model: {self.current_model}\n"
+            f"Backend: {backend_str}\n\n"
+            "Your voice never leaves your machine."
+        )
         msg.exec()
 
+    # ------------------------------------------------------------------
+    # App lifecycle
+    # ------------------------------------------------------------------
+
     def run(self):
-        """Start the application"""
-        # Get backend info
-        backend_info = self.transcriber.get_backend_info()
-
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🚀 iSpeak Started!")
-        print("="*60)
-        print(f"   Hotkey: {self.hotkey.get_hotkey_name()}")
-        print(f"   Language: {self.current_language.upper()} (Romanian)")
-        print(f"   Model: {self.transcriber.model_size}")
-        print(f"   Backend: {backend_info['backend'].upper()}" +
-              (" (Apple Silicon optimized)" if backend_info['using_mlx'] else ""))
-        print("="*60)
-        print("\n⚠️  IMPORTANT: Default language is ENGLISH (EN)")
-        print("   To switch to Romanian: Right-click menu icon > Toggle Language")
-        print(f"   Current setting: {self.current_language.upper()}")
-        if backend_info['mlx_available']:
-            print("\n✨ MLX-Whisper detected - using optimized Apple Silicon backend!")
-        print("\nPress the hotkey and start speaking!")
-        print("Right-click the menu bar icon for options.\n")
+        print("=" * 60)
+        print(f"   Hotkey:   {self.hotkey.get_hotkey_name()}")
+        print(f"   Language: {self.current_language.upper()}")
+        print(f"   Model:    {self.current_model} (loading...)")
+        print("=" * 60)
+        print("\nTray icon is visible. Loading Whisper model in background...")
+        print("Dictation will be available once the model is ready.\n")
 
-        # Start hotkey listener
         self.hotkey.start_listening()
 
-        # Run Qt event loop
-        sys.exit(self.app.exec())
+        # Load the model after the event loop starts (100ms delay so tray renders first)
+        QTimer.singleShot(100, self._load_model_async)
+
+        sys.exit(QApplication.instance().exec())
+
+    def _load_model_async(self):
+        """Start loading the Whisper model in a background thread."""
+        self.tray_icon.setToolTip(f"iSpeak - Loading model ({self.current_model})...")
+        self._start_model_load_thread(self.current_model)
 
     def quit(self):
-        """Clean shutdown"""
         print("\nShutting down iSpeak...")
-
-        # Stop hotkey listener
+        # Persist current state
+        self._settings.update({
+            "language": self.current_language,
+            "model": self.current_model,
+            "auto_enter": self.auto_press_enter,
+        })
+        settings_manager.save(self._settings)
         self.hotkey.stop_listening()
 
-        # Wait for transcription thread to finish
-        if self.transcription_thread is not None and self.transcription_thread.isRunning():
-            print("Waiting for transcription to complete...")
-            self.transcription_thread.wait(3000)  # Wait max 3 seconds
+        if self._transcription_thread is not None and self._transcription_thread.isRunning():
+            print("Waiting for transcription to finish...")
+            self._transcription_thread.wait(3000)
 
-        # Clean up audio
         self.audio.cleanup()
-
-        # Hide tray icon
         self.tray_icon.hide()
-
-        # Quit application
-        self.app.quit()
+        QApplication.instance().quit()
         print("Goodbye!")
 
 
-class ModelLoadThread(QThread):
-    """Background thread for loading/downloading Whisper models"""
-    finished = pyqtSignal(bool, str, object)  # success, model_name, backend_info dict
-    progress = pyqtSignal(str)  # progress message
+# ---------------------------------------------------------------------------
+# Background threads
+# ---------------------------------------------------------------------------
 
-    # MLX model mapping
+class ModelLoadThread(QThread):
+    """Downloads / loads a Whisper model in the background."""
+    finished = pyqtSignal(bool, str, object)
+    progress = pyqtSignal(str)
+
     MLX_MODELS = {
-        "tiny": "mlx-community/whisper-tiny-mlx",
-        "base": "mlx-community/whisper-base-mlx",
-        "small": "mlx-community/whisper-small-mlx",
-        "medium": "mlx-community/whisper-medium-mlx",
-        "large": "mlx-community/whisper-large-v3-mlx",
-        "large-v3": "mlx-community/whisper-large-v3-mlx",
-        "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
-        "turbo": "mlx-community/whisper-large-v3-turbo",
+        "tiny":          "mlx-community/whisper-tiny-mlx",
+        "base":          "mlx-community/whisper-base-mlx",
+        "small":         "mlx-community/whisper-small-mlx",
+        "medium":        "mlx-community/whisper-medium-mlx",
+        "large":         "mlx-community/whisper-large-v3-mlx",
+        "large-v3":      "mlx-community/whisper-large-v3-mlx",
+        "large-v3-turbo":"mlx-community/whisper-large-v3-turbo",
+        "turbo":         "mlx-community/whisper-large-v3-turbo",
     }
 
     def __init__(self, model_name: str, models_dir="./models", use_mlx=True):
@@ -465,79 +539,47 @@ class ModelLoadThread(QThread):
         self.use_mlx = use_mlx
 
     def run(self):
-        """Load model in background with progress updates"""
-        import sys
-
-        # Try MLX first on macOS
         if self.use_mlx and sys.platform == "darwin" and self.model_name in self.MLX_MODELS:
             try:
                 import mlx_whisper
                 self.progress.emit(f"📥 Loading {self.model_name} model (MLX)...")
-
-                start_time = time.time()
+                start = time.time()
                 mlx_model_path = self.MLX_MODELS[self.model_name]
-
-                # MLX models are loaded lazily during transcribe, so just verify the path
-                load_time = time.time() - start_time
-
-                self.progress.emit(f"✅ {self.model_name} model ready (MLX) in {load_time:.1f}s")
-                print(f"Model {self.model_name} ready via MLX in {load_time:.1f}s")
-
-                # Emit success with MLX backend info
+                load_time = time.time() - start
+                self.progress.emit(f"✅ {self.model_name} ready (MLX) in {load_time:.1f}s")
                 self.finished.emit(True, self.model_name, {
                     "backend": "mlx",
                     "mlx_model_path": mlx_model_path,
-                    "model": None  # MLX loads lazily
+                    "model": None,
                 })
                 return
             except ImportError:
-                print("MLX-Whisper not available, falling back to faster-whisper")
+                print("MLX-Whisper not available, using faster-whisper")
             except Exception as e:
-                print(f"MLX load failed: {e}, falling back to faster-whisper")
+                print(f"MLX load failed: {e}, using faster-whisper")
 
-        # Fallback to faster-whisper
         try:
             from faster_whisper import WhisperModel
-
             self.progress.emit(f"📥 Loading {self.model_name} model (faster-whisper)...")
 
-            # Map turbo to faster-whisper model name
-            fw_model = self.model_name
-            if self.model_name == "turbo":
-                fw_model = "large-v3-turbo"
-
-            # Check if model exists locally
+            fw_model = "large-v3-turbo" if self.model_name == "turbo" else self.model_name
             model_dir = os.path.join(self.models_dir, f"models--Systran--faster-whisper-{fw_model}")
-            model_exists = os.path.exists(model_dir)
+            if not os.path.exists(model_dir):
+                self.progress.emit(f"📥 Downloading {self.model_name}... This may take a few minutes.")
 
-            if not model_exists:
-                self.progress.emit(f"📥 Downloading {self.model_name} model... This may take a few minutes.")
-                print(f"Model not found locally, downloading from HuggingFace...")
-            else:
-                self.progress.emit(f"📂 Loading {self.model_name} model from cache...")
+            start = time.time()
+            model = WhisperModel(fw_model, device="auto", compute_type="int8",
+                                  download_root=self.models_dir)
+            load_time = time.time() - start
 
-            # Load the model (will download if not present)
-            start_time = time.time()
-            model = WhisperModel(
-                fw_model,
-                device="auto",
-                compute_type="int8",
-                download_root=self.models_dir
-            )
-            load_time = time.time() - start_time
-
-            self.progress.emit(f"✅ {self.model_name} model loaded in {load_time:.1f}s")
-            print(f"Model {self.model_name} loaded successfully in {load_time:.1f}s")
-
-            # Emit success with faster-whisper backend info
+            self.progress.emit(f"✅ {self.model_name} loaded in {load_time:.1f}s")
             self.finished.emit(True, self.model_name, {
                 "backend": "faster-whisper",
                 "model": model,
-                "mlx_model_path": None
+                "mlx_model_path": None,
             })
-
         except Exception as e:
-            error_msg = f"❌ Error loading {self.model_name} model: {e}"
+            error_msg = f"❌ Error loading {self.model_name}: {e}"
             self.progress.emit(error_msg)
             print(error_msg)
             import traceback
@@ -546,46 +588,39 @@ class ModelLoadThread(QThread):
 
 
 class TranscriptionThread(QThread):
-    """Background thread for transcription"""
-    finished = pyqtSignal(bool, str)  # success, text
+    """Runs transcription + post-processing in a background thread.
+    Text injection happens in the main thread via the finished signal.
+    """
+    finished = pyqtSignal(bool, str)
 
-    def __init__(self, audio_data, transcriber, processor,
-                 injector, context_detector, language):
+    def __init__(self, audio_data, transcriber, processor, context_detector, language):
         super().__init__()
         self.audio_data = audio_data
         self.transcriber = transcriber
         self.processor = processor
-        self.injector = injector
         self.context_detector = context_detector
         self.language = language
 
     def run(self):
-        """Execute transcription in background"""
         try:
-            start_time = time.time()
+            start = time.time()
+            print(f"Transcribing {len(self.audio_data)} samples, lang={self.language.upper()}...")
 
-            # 1. Transcribe
-            print(f"Transcribing ({len(self.audio_data)} samples) using language: {self.language.upper()}...")
-            result = self.transcriber.transcribe(
-                self.audio_data,
-                language=self.language
-            )
+            result = self.transcriber.transcribe(self.audio_data, language=self.language)
             text = result["text"]
             detected_lang = result["language"]
             confidence = result.get("confidence", 0.0)
             backend = result.get("backend", "unknown")
 
-            transcribe_time = result.get("transcribe_time", time.time() - start_time)
-            print(f"Transcription took {transcribe_time:.2f}s ({backend})")
-            print(f"Requested: {self.language.upper()}, Detected: {detected_lang.upper()}, Confidence: {confidence:.2f}")
+            print(f"Transcription: {result.get('transcribe_time', 0):.2f}s ({backend})")
+            print(f"Requested: {self.language.upper()}, Detected: {detected_lang.upper()}, "
+                  f"Confidence: {confidence:.2f}")
 
-            # Warn on language mismatch
             if detected_lang != self.language:
-                print(f"⚠️  Language mismatch: requested {self.language.upper()}, but detected {detected_lang.upper()}")
-
-            # Warn on low confidence (below 0.5 threshold)
+                print(f"⚠️  Language mismatch: requested {self.language.upper()}, "
+                      f"detected {detected_lang.upper()}")
             if confidence < 0.5:
-                print(f"⚠️  Low confidence transcription ({confidence:.2f}). Result may be inaccurate.")
+                print(f"⚠️  Low confidence ({confidence:.2f}). Result may be inaccurate.")
 
             if not text:
                 print("No speech detected")
@@ -594,45 +629,39 @@ class TranscriptionThread(QThread):
 
             print(f"Transcribed: '{text}'")
 
-            # 2. Get context
             context = self.context_detector.get_current_context()
             print(f"Context: {context['app_name']}")
 
-            # 3. Post-process
-            processed_text = self.processor.process(text, context)
-            print(f"Processed: '{processed_text}'")
+            processed = self.processor.process(text, context)
+            print(f"Processed: '{processed}' — total {time.time() - start:.2f}s")
 
-            total_time = time.time() - start_time
-            print(f"Total time: {total_time:.2f}s")
-
-            # Emit finished signal with the processed text
-            # Text injection will happen in the main thread
-            self.finished.emit(True, processed_text)
+            self.finished.emit(True, processed)
 
         except Exception as e:
-            print(f"❌ Error in transcription thread: {e}")
+            print(f"❌ Transcription thread error: {e}")
             import traceback
             traceback.print_exc()
             self.finished.emit(False, "")
 
 
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 def main():
-    """Entry point"""
-    # Set up signal handlers for clean shutdown
-    voice_app = None
-
-    def signal_handler(sig, frame):
-        """Handle Ctrl+C gracefully"""
-        print("\n\nReceived interrupt signal...")
-        if voice_app:
-            voice_app.quit()
-        else:
-            sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # QApplication must exist before any Qt object is created
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
 
     voice_app = iSpeakApp()
+
+    def _signal_handler(sig, frame):
+        print("\nReceived interrupt signal...")
+        voice_app.quit()
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
     voice_app.run()
 
 

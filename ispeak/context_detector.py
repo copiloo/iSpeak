@@ -7,7 +7,7 @@ class ContextDetector:
     def __init__(self):
         self.platform = sys.platform
 
-        if self.platform == "darwin":  # macOS
+        if self.platform == "darwin":
             try:
                 from AppKit import NSWorkspace
                 self.workspace = NSWorkspace.sharedWorkspace()
@@ -15,50 +15,67 @@ class ContextDetector:
             except ImportError:
                 print("Warning: AppKit not available. Install: pip install pyobjc-framework-Cocoa")
                 self.has_appkit = False
+        elif self.platform == "win32":
+            try:
+                import win32gui
+                import win32process
+                import psutil
+                self._win32gui = win32gui
+                self._win32process = win32process
+                self._psutil = psutil
+                self.has_win32 = True
+            except ImportError:
+                print("Warning: pywin32/psutil not available. Install: pip install pywin32 psutil")
+                self.has_win32 = False
         else:
             self.has_appkit = False
 
     def get_current_context(self) -> dict:
         """
-        Get context about current environment
+        Get context about current environment.
         Returns dict with: app_name, bundle_id, file_type
         """
-        if not self.has_appkit:
-            return {
-                'app_name': 'Unknown',
-                'bundle_id': '',
-                'file_type': '',
-            }
+        if self.platform == "darwin":
+            return self._get_context_macos()
+        elif self.platform == "win32":
+            return self._get_context_windows()
+        return self._unknown_context()
 
+    def _get_context_macos(self) -> dict:
+        if not self.has_appkit:
+            return self._unknown_context()
         try:
             active_app = self.workspace.frontmostApplication()
-
-            context = {
+            return {
                 'app_name': active_app.localizedName(),
                 'bundle_id': active_app.bundleIdentifier(),
-                'file_type': self._guess_file_type(active_app),
+                'file_type': self._guess_file_type_macos(active_app),
             }
-
-            return context
-
         except Exception as e:
-            print(f"Error getting context: {e}")
+            print(f"Error getting macOS context: {e}")
+            return self._unknown_context()
+
+    def _get_context_windows(self) -> dict:
+        if not self.has_win32:
+            return self._unknown_context()
+        try:
+            hwnd = self._win32gui.GetForegroundWindow()
+            _, pid = self._win32process.GetWindowThreadProcessId(hwnd)
+            proc = self._psutil.Process(pid)
+            exe_name = proc.name()  # e.g. "Code.exe"
+            app_name = os.path.splitext(exe_name)[0]  # e.g. "Code"
+
             return {
-                'app_name': 'Unknown',
+                'app_name': app_name,
                 'bundle_id': '',
-                'file_type': '',
+                'file_type': self._guess_file_type_windows(app_name),
             }
+        except Exception as e:
+            print(f"Error getting Windows context: {e}")
+            return self._unknown_context()
 
-    def _guess_file_type(self, app) -> str:
-        """
-        Try to determine what file user is editing
-        This is a basic heuristic - could be improved with accessibility API
-        Note: Returns empty string for generic code editors to avoid wrong assumptions
-        """
+    def _guess_file_type_macos(self, app) -> str:
         app_name = app.localizedName()
-
-        # Map specialized IDEs to their primary file types
-        # Generic editors (VS Code, Sublime) return empty since they're multi-language
         app_file_map = {
             'PyCharm': '.py',
             'IntelliJ IDEA': '.java',
@@ -69,22 +86,41 @@ class ContextDetector:
             'Android Studio': '.kt',
             'TextEdit': '.txt',
         }
-
         for key, file_type in app_file_map.items():
             if key in app_name:
                 return file_type
-
-        # Generic multi-language editors - return empty to avoid wrong assumptions
-        # Code formatting will still apply based on app detection in is_code_editor()
         return ''
+
+    def _guess_file_type_windows(self, app_name: str) -> str:
+        # Map exe names (without extension) to primary file types
+        app_file_map = {
+            'pycharm64': '.py',
+            'pycharm': '.py',
+            'idea64': '.java',
+            'idea': '.java',
+            'webstorm64': '.js',
+            'webstorm': '.js',
+            'goland64': '.go',
+            'goland': '.go',
+            'rubymine64': '.rb',
+            'rubymine': '.rb',
+            'studio64': '.kt',      # Android Studio
+            'notepad': '.txt',
+        }
+        lower = app_name.lower()
+        return app_file_map.get(lower, '')
+
+    def _unknown_context(self) -> dict:
+        return {'app_name': 'Unknown', 'bundle_id': '', 'file_type': ''}
 
     def is_code_editor(self, app_name: str) -> bool:
         """Check if given app is a code editor"""
         code_editors = [
-            'Code', 'VS Code', 'Visual Studio Code',
-            'PyCharm', 'IntelliJ', 'WebStorm', 'GoLand',
-            'Xcode', 'Sublime Text', 'Atom', 'Cursor',
-            'TextMate', 'BBEdit', 'Nova'
+            'Code', 'VS Code', 'Visual Studio Code', 'Cursor',
+            'PyCharm', 'pycharm', 'IntelliJ', 'idea',
+            'WebStorm', 'webstorm', 'GoLand', 'goland',
+            'Xcode', 'Sublime Text', 'sublime_text', 'Atom',
+            'TextMate', 'BBEdit', 'Nova', 'Fleet',
+            'notepad++', 'Notepad++',
         ]
-
         return any(editor.lower() in app_name.lower() for editor in code_editors)

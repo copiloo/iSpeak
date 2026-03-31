@@ -1,26 +1,19 @@
 # Core dependencies
-faster-whisper>=0.10.0          # Fast Whisper implementation (fallback)
-pyaudio>=0.2.13                 # Audio capture (see INSTALL notes for macOS)
+faster-whisper>=0.10.0          # Fast Whisper implementation
+pyaudio>=0.2.13                 # Audio capture
 pynput>=1.7.6                   # Keyboard control & hotkeys
 pyperclip>=1.8.2                # Clipboard operations
 PyQt6>=6.6.0                    # GUI framework for tray icon
 numpy>=1.24.0                   # Audio processing
 
-# NOTE for macOS users:
-# PyAudio requires PortAudio to be installed via Homebrew.
-# For automatic setup, run: ./setup.sh
-# For manual installation:
-#   1. brew install portaudio
-#   2. CFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" pip install --no-binary :all: pyaudio
+# Windows-specific (context detection)
+pywin32>=306          ; sys_platform == 'win32'
+psutil>=5.9.0         ; sys_platform == 'win32'
 
-# macOS-specific (only on macOS)
-pyobjc-framework-Cocoa>=10.0 ; sys_platform == 'darwin'
-pyobjc-framework-Quartz>=10.0 ; sys_platform == 'darwin'
+# macOS-specific
+pyobjc-framework-Cocoa>=10.0   ; sys_platform == 'darwin'
+pyobjc-framework-Quartz>=10.0  ; sys_platform == 'darwin'
 
 # MLX for Apple Silicon (30-40% faster than faster-whisper)
-mlx>=0.5.0 ; sys_platform == 'darwin'
-mlx-whisper>=0.1.0 ; sys_platform == 'darwin'
-
-# Optional for better performance
-# torch>=2.0.0                  # If you want GPU acceleration
-# onnxruntime>=1.16.0           # Alternative runtime
+mlx>=0.5.0            ; sys_platform == 'darwin'
+mlx-whisper>=0.1.0    ; sys_platform == 'darwin'
