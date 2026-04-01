@@ -3,7 +3,6 @@
 import pyaudio
 import numpy as np
 import time
-from collections import deque
 
 class AudioCapture:
     def __init__(self,
@@ -14,7 +13,7 @@ class AudioCapture:
         self.rate = rate
         self.chunk_size = chunk_size
         self.channels = channels
-        self.audio_buffer = deque(maxlen=300)  # ~19 seconds at 16kHz/1024-chunk
+        self.audio_buffer = []  # Unbounded — recording limited by key hold duration
         self.is_recording = False
 
         self.stream = None
