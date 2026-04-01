@@ -150,7 +150,7 @@ class TranscriptionEngine:
         segments, info = self.model.transcribe(
             audio_data,
             language=language,
-            beam_size=3,
+            beam_size=1,           # greedy decoding — much faster, fine for dictation
             vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=300),
             condition_on_previous_text=False,

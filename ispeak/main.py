@@ -17,16 +17,69 @@ from context_detector import ContextDetector
 from overlay_widget import OverlayWidget
 from settings_dialog import SettingsDialog
 import settings_manager
+import logging
+
+# ---------------------------------------------------------------------------
+# Logging — always write to a file so crashes are diagnosable even without
+# the debug console.  The log lives next to the executable (or next to
+# main.py when running from source).
+# ---------------------------------------------------------------------------
+
+def _app_dir() -> str:
+    """Directory that holds the exe (frozen) or the project root (source)."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+_log_path = os.path.join(_app_dir(), "ispeak.log")
+_log_handler = logging.FileHandler(_log_path, encoding="utf-8", errors="replace")
+_log_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+_log = logging.getLogger("iSpeak")
+_log.setLevel(logging.INFO)
+_log.addHandler(_log_handler)
 
 
 def _set_console_visible(visible: bool):
-    """Show or hide the Windows console window at runtime."""
+    """Allocate or free a debug console window at runtime.
+
+    Because the app is built as a windowed exe (console=False), there is no
+    console by default.  We create one on demand with AllocConsole() and
+    redirect Python's stdout/stderr to it.  FreeConsole() detaches it —
+    closing the console window will NOT kill the app.
+    """
     if sys.platform != "win32":
         return
     import ctypes
-    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-    if hwnd:
-        ctypes.windll.user32.ShowWindow(hwnd, 5 if visible else 0)
+    kernel32 = ctypes.windll.kernel32
+
+    if visible:
+        # Allocate a new console (no-op if one already exists)
+        if not kernel32.GetConsoleWindow():
+            kernel32.AllocConsole()
+            # Set a friendly title
+            kernel32.SetConsoleTitleW("iSpeak — Debug Console")
+            # Prevent closing the console from killing the app
+            hwnd = kernel32.GetConsoleWindow()
+            if hwnd:
+                import win32con, win32gui
+                # Remove the Close button from the console window so users
+                # use the Settings toggle instead.  This also prevents the
+                # default "close console = kill process" behaviour.
+                style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
+                win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE,
+                                       style & ~win32con.WS_SYSMENU)
+        # Redirect Python streams to the (new) console
+        sys.stdout = open("CONOUT$", "w", encoding="utf-8", errors="replace")
+        sys.stderr = open("CONOUT$", "w", encoding="utf-8", errors="replace")
+    else:
+        # Free the console — the app keeps running as a windowed process
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            # Restore Python streams before freeing the console
+            sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")
+            sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="replace")
+            kernel32.FreeConsole()
 
 
 class iSpeakApp(QObject):
@@ -160,7 +213,7 @@ class iSpeakApp(QObject):
         print(f"[Main] Transcription done: success={success}, len={len(text) if text else 0}")
 
         if success and text:
-            QTimer.singleShot(100, lambda: self._inject_text(text))
+            QTimer.singleShot(0, lambda: self._inject_text(text))
             self.tray_icon.setToolTip("✅ Ready")
         else:
             print("[Main] ❌ Transcription failed or empty")
@@ -238,7 +291,10 @@ class iSpeakApp(QObject):
             return
 
         self.is_processing = True
-        self.tray_icon.setToolTip(f"📥 Loading {model_name} model...")
+        self.tray_icon.setToolTip(f"Loading {model_name} model...")
+        # Rebuild menu immediately so the clicked item's checkmark is cleared
+        # (Qt visually toggles it on click, but current_model hasn't changed yet)
+        self._update_tray_menu()
         self._start_model_load_thread(model_name)
 
     def _start_model_load_thread(self, model_name: str):
@@ -254,10 +310,14 @@ class iSpeakApp(QObject):
                 old.wait(2000)
             old.deleteLater()
 
-        thread = ModelLoadThread(model_name)
+        models_dir = os.path.join(_app_dir(), "models")
+        thread = ModelLoadThread(model_name, models_dir=models_dir)
         thread.finished.connect(self._on_model_loaded)
         thread.progress.connect(self._on_model_download_progress)
-        thread.finished.connect(thread.deleteLater)
+        # Do NOT connect thread.deleteLater to finished — it races with
+        # _on_model_loaded and can destroy the thread mid-callback.
+        # Cleanup happens in _start_model_load_thread (for the old thread)
+        # and _on_model_loaded (clears the reference).
         thread.start()
         self._model_load_thread = thread
 
@@ -268,6 +328,11 @@ class iSpeakApp(QObject):
 
     @pyqtSlot(bool, str, object)
     def _on_model_loaded(self, success: bool, model_name: str, backend_info: dict):
+        # Clear the thread reference so the next load can clean it up.
+        # Do NOT call deleteLater() here — Qt may still be dispatching
+        # queued signals from this same thread object.
+        self._model_load_thread = None
+
         is_initial_load = self.transcriber is None
 
         if success:
@@ -275,7 +340,7 @@ class iSpeakApp(QObject):
                 # First load — create the TranscriptionEngine shell and inject the loaded model
                 self.transcriber = TranscriptionEngine.__new__(TranscriptionEngine)
                 self.transcriber.current_language = self.current_language
-                self.transcriber.models_dir = "./models"
+                self.transcriber.models_dir = os.path.join(_app_dir(), "models")
                 self.transcriber.use_mlx = False
                 self.transcriber.mlx_model_path = None
                 self.transcriber.model = None
@@ -290,14 +355,14 @@ class iSpeakApp(QObject):
             self.current_model = model_name
 
             backend_name = backend_info.get("backend", "faster-whisper").upper()
-            print(f"✅ Model ready: {model_name} ({backend_name})")
+            _log.info(f"Model ready: {model_name} ({backend_name})")
             self.tray_icon.setToolTip("iSpeak - Ready")
 
             if not is_initial_load:
                 QMessageBox.information(None, "Model Loaded",
                                         f"Switched to '{model_name}' model!\nBackend: {backend_name}")
         else:
-            print(f"❌ Failed to load {model_name} model")
+            _log.warning(f"Failed to load {model_name} model")
             self.tray_icon.setToolTip("iSpeak - Model load failed")
             QMessageBox.critical(None, "Model Load Error",
                                  f"Failed to load '{model_name}'.")
@@ -469,15 +534,15 @@ class iSpeakApp(QObject):
     # ------------------------------------------------------------------
 
     def run(self):
-        print("\n" + "=" * 60)
-        print("🚀 iSpeak Started!")
+        print("=" * 60)
+        print("iSpeak Started!")
         print("=" * 60)
         print(f"   Hotkey:   {self.hotkey.get_hotkey_name()}")
         print(f"   Language: {self.current_language.upper()}")
         print(f"   Model:    {self.current_model} (loading...)")
         print("=" * 60)
-        print("\nTray icon is visible. Loading Whisper model in background...")
-        print("Dictation will be available once the model is ready.\n")
+        _log.info(f"iSpeak started — hotkey={self.hotkey.get_hotkey_name()}, "
+                   f"lang={self.current_language}, model={self.current_model}")
 
         self.hotkey.start_listening()
 
@@ -554,37 +619,98 @@ class ModelLoadThread(QThread):
                 })
                 return
             except ImportError:
-                print("MLX-Whisper not available, using faster-whisper")
+                _log.info("MLX-Whisper not available, using faster-whisper")
             except Exception as e:
-                print(f"MLX load failed: {e}, using faster-whisper")
+                _log.warning(f"MLX load failed: {e}, using faster-whisper")
 
         try:
+            # Suppress noisy warnings from huggingface_hub / tqdm that can
+            # crash windowed apps when stdout/stderr are not real consoles.
+            os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+            import warnings
+            warnings.filterwarnings("ignore", category=UserWarning)
+
             from faster_whisper import WhisperModel
-            self.progress.emit(f"📥 Loading {self.model_name} model (faster-whisper)...")
+            from faster_whisper.utils import _MODELS
+
+            # Ensure models directory exists
+            os.makedirs(self.models_dir, exist_ok=True)
+            _log.info(f"Loading model '{self.model_name}', models_dir={self.models_dir}")
 
             fw_model = "large-v3-turbo" if self.model_name == "turbo" else self.model_name
-            model_dir = os.path.join(self.models_dir, f"models--Systran--faster-whisper-{fw_model}")
-            if not os.path.exists(model_dir):
-                self.progress.emit(f"📥 Downloading {self.model_name}... This may take a few minutes.")
+            repo_id = _MODELS.get(fw_model, fw_model)
 
+            # Always go through snapshot_download with progress reporting.
+            # It returns instantly if the model is fully cached, and resumes
+            # with progress if a previous download was interrupted.
+            self.progress.emit(f"Loading {self.model_name} model...")
+            _log.info(f"Downloading/verifying {repo_id}...")
+            model_path = self._download_with_progress(repo_id)
+
+            self.progress.emit(f"Initializing {self.model_name} model...")
             start = time.time()
-            model = WhisperModel(fw_model, device="auto", compute_type="int8",
-                                  download_root=self.models_dir)
+            # Use physical core count for optimal threading (hyper-threads don't help)
+            import multiprocessing
+            cpu_threads = max(4, multiprocessing.cpu_count() // 2)
+            model = WhisperModel(model_path, device="cpu", compute_type="int8",
+                                 cpu_threads=cpu_threads)
             load_time = time.time() - start
 
-            self.progress.emit(f"✅ {self.model_name} loaded in {load_time:.1f}s")
+            _log.info(f"Model '{self.model_name}' loaded in {load_time:.1f}s")
+            self.progress.emit(f"{self.model_name} loaded in {load_time:.1f}s")
             self.finished.emit(True, self.model_name, {
                 "backend": "faster-whisper",
                 "model": model,
                 "mlx_model_path": None,
             })
         except Exception as e:
-            error_msg = f"❌ Error loading {self.model_name}: {e}"
+            error_msg = f"Error loading {self.model_name}: {e}"
+            _log.error(error_msg, exc_info=True)
             self.progress.emit(error_msg)
-            print(error_msg)
-            import traceback
-            traceback.print_exc()
             self.finished.emit(False, self.model_name, {})
+
+    def _download_with_progress(self, repo_id: str) -> str:
+        """Download a HuggingFace model with real-time progress reporting."""
+        import huggingface_hub
+        from tqdm.auto import tqdm as _tqdm_base
+
+        thread_ref = self  # capture for the inner class
+
+        class _ProgressTqdm(_tqdm_base):
+            """Custom tqdm that emits Qt signals instead of printing."""
+            def __init__(self, *args, **kwargs):
+                # huggingface_hub passes extra kwargs (e.g. name=) that
+                # tqdm doesn't accept — strip them to avoid TqdmKeyError.
+                kwargs.pop("name", None)
+                kwargs["disable"] = False
+                kwargs.setdefault("unit", "B")
+                kwargs.setdefault("unit_scale", True)
+                super().__init__(*args, **kwargs)
+                self._last_emit = 0.0
+
+            def update(self, n=1):
+                super().update(n)
+                # Throttle Qt signal emissions to once per second
+                now = time.time()
+                if now - self._last_emit < 1.0:
+                    return
+                self._last_emit = now
+                if self.total and self.total > 0:
+                    pct = int(self.n / self.total * 100)
+                    mb_done = self.n / 1024 / 1024
+                    mb_total = self.total / 1024 / 1024
+                    thread_ref.progress.emit(
+                        f"Downloading {thread_ref.model_name}: "
+                        f"{pct}% ({mb_done:.0f}/{mb_total:.0f} MB)")
+
+            def close(self):
+                super().close()
+
+        return huggingface_hub.snapshot_download(
+            repo_id,
+            cache_dir=self.models_dir,
+            tqdm_class=_ProgressTqdm,
+        )
 
 
 class TranscriptionThread(QThread):
@@ -648,7 +774,33 @@ class TranscriptionThread(QThread):
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _install_crash_handler():
+    """Write any unhandled exception to ispeak_crash.log next to the exe."""
+    crash_log = os.path.join(_app_dir(), "ispeak_crash.log")
+
+    def _hook(exc_type, exc_value, exc_tb):
+        import traceback
+        try:
+            with open(crash_log, "a", encoding="utf-8", errors="replace") as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"Crash at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
+        except Exception:
+            pass  # nothing we can do
+
+    sys.excepthook = _hook
+
+
 def main():
+    # FIRST: safe streams — must happen before ANY print / import side-effect.
+    # With console=False (windowed app), stdout/stderr may be None or a
+    # broken handle that defaults to cp1252 on Windows (can't encode emoji).
+    sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")
+    sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="replace")
+
+    # Global crash handler — writes unhandled exceptions to a file
+    _install_crash_handler()
+
     # QApplication must exist before any Qt object is created
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)

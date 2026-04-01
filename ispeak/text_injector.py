@@ -123,7 +123,7 @@ def restore_focus(fg_hwnd, focused_hwnd):
         for tid in attached:
             _user32.AttachThreadInput(cur_thread, tid, False)
 
-        delay = 0.20 if electron else 0.10
+        delay = 0.15 if electron else 0.03
         time.sleep(delay)
 
         # Verify
@@ -138,7 +138,7 @@ def restore_focus(fg_hwnd, focused_hwnd):
             time.sleep(0.05)
             _user32.keybd_event(0, 0, 0, 0)
             _user32.SetForegroundWindow(fg_hwnd)
-            time.sleep(0.10)
+            time.sleep(0.05)
             fg_after = _user32.GetForegroundWindow()
             success = fg_after == fg_hwnd
             print(f"[TextInjector] Retry result — success={success}")
@@ -195,7 +195,7 @@ class TextInjector:
                 old_clipboard = ""
 
             pyperclip.copy(text)
-            time.sleep(0.025)  # Let clipboard settle
+            time.sleep(0.01)  # Let clipboard settle
 
             # Restore focus as close as possible to the actual paste
             focus_ok = restore_focus(target_hwnd, target_focus_hwnd)
@@ -208,7 +208,7 @@ class TextInjector:
                 self.keyboard.release(Key.esc)
                 # Electron/Chromium needs extra time to process Escape and
                 # return internal focus from the menu bar to the editor.
-                time.sleep(0.15 if electron else 0.05)
+                time.sleep(0.10 if electron else 0.02)
 
                 with self.keyboard.pressed(_PASTE_MODIFIER):
                     self.keyboard.press('v')
