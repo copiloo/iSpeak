@@ -4,6 +4,8 @@ import os
 import sys
 import time
 
+import short_window
+
 # Try MLX-Whisper first (Apple Silicon only)
 MLX_AVAILABLE = False
 if sys.platform == "darwin":
@@ -21,6 +23,18 @@ try:
 except ImportError:
     FASTER_WHISPER_AVAILABLE = False
     print("[Transcription] WARNING: faster-whisper not installed. Install: pip install faster-whisper")
+
+
+# Languages "auto" mode chooses between.  Restricting detection matters:
+# Whisper sometimes guesses a related language (e.g. Italian/Portuguese for
+# Romanian) on short clips, and forcing the WRONG language makes Whisper
+# translate instead of transcribe.
+AUTO_LANGUAGES = ("ro", "en")
+
+# Large models get a separate small model for language detection (see
+# TranscriptionEngine._detect_language).
+DETECTOR_MODEL = "small"
+MODELS_USING_DETECTOR = ("medium", "large", "turbo")
 
 
 class TranscriptionEngine:
@@ -45,12 +59,30 @@ class TranscriptionEngine:
         self.models_dir = models_dir
         self.use_mlx = use_mlx and MLX_AVAILABLE
         self.model = None       # faster-whisper model (None when using MLX)
+        self.detector = None    # optional small model used only for language detection
+        self.fast_mode = True   # short encoder window for short clips (see short_window.py)
         self.backend = None
         self.mlx_model_path = None
 
         os.makedirs(models_dir, exist_ok=True)
         self._load_model(model_size)
         self.current_language = "ro"
+
+    @classmethod
+    def from_loaded(cls, model_size, backend_info, language="en", models_dir="./models"):
+        """Wrap a model that was already loaded (e.g. by a background thread)
+        without triggering another load in __init__."""
+        engine = cls.__new__(cls)
+        engine.model_size = model_size
+        engine.models_dir = models_dir
+        engine.current_language = language
+        engine.backend = backend_info.get("backend", "faster-whisper")
+        engine.model = backend_info.get("model")
+        engine.detector = backend_info.get("detector")
+        engine.fast_mode = True
+        engine.mlx_model_path = backend_info.get("mlx_model_path")
+        engine.use_mlx = engine.backend == "mlx"
+        return engine
 
     def _load_model(self, model_size):
         """Load only the model needed for the selected backend."""
@@ -94,7 +126,11 @@ class TranscriptionEngine:
 
         Args:
             audio_data: numpy float32 array at 16kHz
-            language: language code ('ro', 'en', …) or None for auto-detect
+            language: 'ro', 'en', 'auto' (detect among AUTO_LANGUAGES),
+                      or None to use self.current_language
+
+        NOTE: do not pass faster-whisper `hotwords` / `initial_prompt` with
+        English terms — it measurably degrades Romanian (diacritics dropped).
 
         Returns:
             dict: text, language, confidence, segments, transcribe_time, backend
@@ -105,7 +141,7 @@ class TranscriptionEngine:
         start_time = time.time()
 
         if self.backend == "mlx":
-            result = self._transcribe_mlx(audio_data, language)
+            result = self._transcribe_mlx(audio_data, None if language == "auto" else language)
         else:
             result = self._transcribe_faster_whisper(audio_data, language)
 
@@ -147,15 +183,36 @@ class TranscriptionEngine:
             return self._transcribe_faster_whisper(audio_data, language)
 
     def _transcribe_faster_whisper(self, audio_data, language):
-        segments, info = self.model.transcribe(
-            audio_data,
-            language=language,
+        options = dict(
             beam_size=1,           # greedy decoding — much faster, fine for dictation
             vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=300),
             condition_on_previous_text=False,
             no_speech_threshold=0.6,
         )
+        if self.fast_mode:
+            try:
+                fast = short_window.transcribe(self.model, audio_data, language, AUTO_LANGUAGES,
+                                               detect_fallback=self._detect_language)
+            except Exception as e:
+                print(f"[Transcription] Fast path failed: {e}")
+                fast = None
+            if fast is not None:
+                return {
+                    "text": fast["text"],
+                    "language": fast["language"],
+                    "confidence": fast["confidence"],
+                    "segments": [],
+                    "mode": f"fast {fast['window']}s window",
+                }
+            mode = "full 30s window (fast path fell back)"
+        else:
+            mode = "full 30s window"
+
+        if language == "auto":
+            language = self._detect_language(audio_data)
+
+        segments, info = self.model.transcribe(audio_data, language=language, **options)
         segments_list = list(segments)
         text = " ".join(s.text for s in segments_list).strip()
         return {
@@ -163,7 +220,24 @@ class TranscriptionEngine:
             "language": info.language,
             "confidence": self._calculate_confidence_fw(segments_list),
             "segments": segments_list,
+            "mode": mode,
         }
+
+    def _detect_language(self, audio_data) -> str:
+        """Pick the most likely of AUTO_LANGUAGES for this clip.
+
+        Uses the small helper `detector` model when one is loaded: with large
+        models (turbo/medium/large) detection costs a full extra encoder pass
+        (~5s for turbo on CPU), while small does it in ~1s just as reliably.
+        """
+        model = self.detector or self.model
+        try:
+            _, _, all_probs = model.detect_language(audio_data, vad_filter=True)
+            probs = dict(all_probs or [])
+        except Exception as e:  # e.g. VAD found no speech at all
+            print(f"[Transcription] Language detection failed: {e}")
+            probs = {}
+        return max(AUTO_LANGUAGES, key=lambda lang: probs.get(lang, 0.0))
 
     def _calculate_confidence_mlx(self, segments):
         if not segments:

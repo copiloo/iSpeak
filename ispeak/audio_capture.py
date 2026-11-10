@@ -1,43 +1,129 @@
 # ispeak/audio_capture.py
 
-import pyaudio
+import logging
+
 import numpy as np
-import time
+import pyaudio
+
+_log = logging.getLogger("iSpeak")
+
+# Pseudo-devices that just mean "whatever Windows' default is" — we offer our
+# own "System default" entry instead.
+_PSEUDO_DEVICE_MARKERS = ("Sound Mapper", "Primary Sound Capture")
+
+
+def _fix_name(name: str) -> str:
+    """PyAudio decodes Windows' UTF-8 device names as Windows-1252, so a
+    curly apostrophe (U+2019) shows up as the three characters U+00E2 U+20AC
+    U+2122, and Romanian letters get mangled the same way.  Undo that when the
+    name round-trips cleanly; otherwise it was decoded correctly - keep it."""
+    try:
+        return name.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name
+
 
 class AudioCapture:
     def __init__(self,
-                 rate=16000,      # Whisper expects 16kHz
+                 rate=16000,       # Whisper expects 16kHz
                  chunk_size=1024,  # Process in small chunks
-                 channels=1):      # Mono audio
+                 channels=1,       # Mono audio
+                 device_name=""):  # "" = Windows default recording device
 
         self.rate = rate
         self.chunk_size = chunk_size
         self.channels = channels
+        self.device_name = device_name or ""
         self.audio_buffer = []  # Unbounded — recording limited by key hold duration
         self.is_recording = False
+        # Name of the mic actually used for the last recording, and whether the
+        # selected mic was missing so we fell back to the default.
+        self.active_device_name = ""
+        self.used_fallback = False
 
         self.stream = None
-
-        # Initialize PyAudio once at startup (not on every recording)
         self.p = pyaudio.PyAudio()
 
-    def _get_default_input_device(self):
-        """Get the current default input device index."""
+    # ------------------------------------------------------------------
+    # Device enumeration / selection
+    # ------------------------------------------------------------------
+
+    def _rescan(self):
+        """Re-enumerate devices.  PortAudio only scans at initialisation, so
+        this is what picks up a headset plugged in (or a Windows default
+        changed) after the app started.  Cheap (~25ms)."""
+        if self.stream is not None:
+            return  # never while a stream is open
         try:
-            default_info = self.p.get_default_input_device_info()
-            device_name = default_info.get('name', 'Unknown')
-            device_index = default_info.get('index')
-            print(f"[Audio] Using input device: {device_name} (index {device_index})")
+            self.p.terminate()
+        except Exception:
+            pass
+        self.p = pyaudio.PyAudio()
 
-            is_bluetooth = any(keyword in device_name.lower()
-                             for keyword in ['airpods', 'bluetooth', 'wireless', 'bt'])
-            if is_bluetooth:
-                print(f"[Audio] Bluetooth device detected, may need warm-up time")
+    def _input_devices(self):
+        """[(mme_index, full_name)] for real input devices, one entry each.
 
-            return device_index, is_bluetooth
+        Streams are opened through MME (the default host API, which resamples
+        to 16kHz for us), but MME truncates names to 31 characters, so the
+        full name is taken from the matching DirectSound entry when there is one.
+        """
+        mme = self.p.get_default_host_api_info()["index"]
+        mme_devices, other_names = [], []
+        for i in range(self.p.get_device_count()):
+            info = self.p.get_device_info_by_index(i)
+            if info.get("maxInputChannels", 0) <= 0:
+                continue
+            name = _fix_name(info.get("name", ""))
+            if any(marker in name for marker in _PSEUDO_DEVICE_MARKERS):
+                continue
+            if info.get("hostApi") == mme:
+                mme_devices.append((i, name))
+            else:
+                other_names.append(name)
+
+        result = []
+        for index, short in mme_devices:
+            longer = [n for n in other_names if n.startswith(short) and "\n" not in n]
+            result.append((index, min(longer, key=len) if longer else short))
+        return result
+
+    def list_input_devices(self):
+        """Full names of the currently connected microphones."""
+        self._rescan()
+        try:
+            return [name for _, name in self._input_devices()]
         except Exception as e:
-            print(f"[Audio] Could not get default input device: {e}")
-            return None, False
+            _log.warning(f"Could not list input devices: {e}")
+            return []
+
+    def default_device_name(self) -> str:
+        try:
+            return _fix_name(self.p.get_default_input_device_info().get("name", ""))
+        except Exception:
+            return ""
+
+    def set_device(self, device_name: str):
+        """Select the mic for future recordings ("" = Windows default)."""
+        self.device_name = device_name or ""
+
+    def _resolve_device(self):
+        """(MME index, full name) of the selected mic, or (None, None) for the
+        Windows default / when the selected mic isn't connected."""
+        if not self.device_name:
+            return None, None
+        devices = self._input_devices()
+        for index, name in devices:
+            if name == self.device_name:
+                return index, name
+        # Fall back to prefix matching (MME's truncated names / renamed endpoints)
+        for index, name in devices:
+            if self.device_name.startswith(name) or name.startswith(self.device_name):
+                return index, name
+        return None, None
+
+    # ------------------------------------------------------------------
+    # Recording
+    # ------------------------------------------------------------------
 
     def _open_stream(self, device_index):
         """Open a PyAudio stream on the given device index (None = system default)."""
@@ -51,30 +137,41 @@ class AudioCapture:
             stream_callback=self._audio_callback
         )
 
+    def _open_selected_or_default(self):
+        index, name = self._resolve_device()
+        self.used_fallback = bool(self.device_name) and index is None
+        if self.used_fallback:
+            _log.warning(f"Selected microphone '{self.device_name}' not found — using the Windows default")
+        self.active_device_name = name if index is not None else self.default_device_name()
+        self.stream = self._open_stream(index)
+        self.stream.start_stream()
+
     def start_recording(self):
-        """Start capturing audio."""
+        """Start capturing audio from the selected (or default) microphone."""
         self.is_recording = True
         self.audio_buffer.clear()
 
         try:
-            device_index, is_bluetooth = self._get_default_input_device()
-            self.stream = self._open_stream(device_index)
-            self.stream.start_stream()
-
-            if is_bluetooth:
-                time.sleep(0.2)  # 200ms warm-up for Bluetooth devices
-
+            self._rescan()
+            self._open_selected_or_default()
         except Exception as e:
-            print(f"[Audio] Error opening stream: {e}")
-            # Device may have changed — reinitialize PyAudio and retry once
+            _log.warning(f"Could not open microphone '{self.device_name or 'default'}': {e}")
+            if self.stream is not None:  # opened but failed to start
+                try:
+                    self.stream.close()
+                except Exception:
+                    pass
+            self.stream = None
+            # Last resort: the Windows default device
             try:
-                print("[Audio] Reinitializing PyAudio and retrying...")
-                self.p.terminate()
-                self.p = pyaudio.PyAudio()
-                self.stream = self._open_stream(None)  # system default, no device index
+                self._rescan()
+                self.active_device_name = self.default_device_name()
+                self.used_fallback = bool(self.device_name)
+                self.stream = self._open_stream(None)
                 self.stream.start_stream()
             except Exception as e2:
-                print(f"[Audio] Failed to open audio stream: {e2}")
+                _log.error(f"Failed to open any microphone: {e2}")
+                self.stream = None
                 self.is_recording = False
                 raise
 
@@ -104,8 +201,7 @@ class AudioCapture:
         audio_rms = np.sqrt(np.mean(audio_float ** 2))
 
         if audio_level < 0.001:
-            print(f"[Audio] ⚠️  Audio is silent! Max level: {audio_level:.6f}")
-            print("[Audio] Check system audio input settings or speak louder.")
+            _log.warning(f"Audio from '{self.active_device_name}' is silent (max level {audio_level:.6f})")
         else:
             print(f"[Audio] Audio captured: max={audio_level:.3f}, rms={audio_rms:.3f}")
 

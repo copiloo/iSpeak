@@ -30,15 +30,16 @@ class ContextDetector:
         else:
             self.has_appkit = False
 
-    def get_current_context(self) -> dict:
+    def get_current_context(self, hwnd=None) -> dict:
         """
-        Get context about current environment.
+        Get context about the target application.
+        hwnd: (Windows) window to inspect; defaults to the current foreground window.
         Returns dict with: app_name, bundle_id, file_type
         """
         if self.platform == "darwin":
             return self._get_context_macos()
         elif self.platform == "win32":
-            return self._get_context_windows()
+            return self._get_context_windows(hwnd)
         return self._unknown_context()
 
     def _get_context_macos(self) -> dict:
@@ -55,11 +56,12 @@ class ContextDetector:
             print(f"Error getting macOS context: {e}")
             return self._unknown_context()
 
-    def _get_context_windows(self) -> dict:
+    def _get_context_windows(self, hwnd=None) -> dict:
         if not self.has_win32:
             return self._unknown_context()
         try:
-            hwnd = self._win32gui.GetForegroundWindow()
+            if not hwnd or not self._win32gui.IsWindow(hwnd):
+                hwnd = self._win32gui.GetForegroundWindow()
             _, pid = self._win32process.GetWindowThreadProcessId(hwnd)
             proc = self._psutil.Process(pid)
             exe_name = proc.name()  # e.g. "Code.exe"

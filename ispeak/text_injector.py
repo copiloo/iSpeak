@@ -1,6 +1,7 @@
 # ispeak/text_injector.py
 
 import sys
+import threading
 from pynput.keyboard import Controller, Key
 import time
 import pyperclip
@@ -200,21 +201,15 @@ class TextInjector:
             # Restore focus as close as possible to the actual paste
             focus_ok = restore_focus(target_hwnd, target_focus_hwnd)
 
+            # NOTE: no Escape is sent before pasting.  It was only needed to
+            # dismiss the menu bar activated by the old Right-Alt hotkey, and it
+            # has side effects (cancels Excel cell edits, closes dialogs,
+            # interrupts running agents in chat panels).
             if focus_ok:
-                # Focus restored — use keyboard Ctrl+V
-                # Dismiss any lingering Alt-activated menu bar (harmless in editors)
-                electron = target_focus_hwnd and _is_electron_hwnd(target_focus_hwnd)
-                self.keyboard.press(Key.esc)
-                self.keyboard.release(Key.esc)
-                # Electron/Chromium needs extra time to process Escape and
-                # return internal focus from the menu bar to the editor.
-                time.sleep(0.10 if electron else 0.02)
-
                 with self.keyboard.pressed(_PASTE_MODIFIER):
                     self.keyboard.press('v')
                     self.keyboard.release('v')
-                print(f"[TextInjector] Pasted via Ctrl+V (electron={electron}): '{text[:50]}{'...' if len(text) > 50 else ''}'")
-
+                print(f"[TextInjector] Pasted via Ctrl+V: '{text[:50]}{'...' if len(text) > 50 else ''}'")
 
             elif sys.platform == "win32":
                 # Focus restore failed — try sending WM_PASTE directly to the
@@ -232,23 +227,39 @@ class TextInjector:
                 else:
                     # Last resort — blind Ctrl+V to whatever is currently focused
                     print(f"[TextInjector] Focus failed, blind Ctrl+V as last resort")
-                    self.keyboard.press(Key.esc)
-                    self.keyboard.release(Key.esc)
-                    time.sleep(0.05)
                     with self.keyboard.pressed(_PASTE_MODIFIER):
                         self.keyboard.press('v')
                         self.keyboard.release('v')
 
-            time.sleep(0.05)  # Let paste complete
-
             if old_clipboard:
-                pyperclip.copy(old_clipboard)
+                self._schedule_clipboard_restore(text, old_clipboard)
 
         except Exception as e:
             print(f"[TextInjector] Error pasting text: {e}")
             import traceback
             traceback.print_exc()
             self._type_slowly(text)
+
+    @staticmethod
+    def _schedule_clipboard_restore(pasted_text: str, old_clipboard: str,
+                                    delay: float = 0.5):
+        """Restore the user's clipboard after the target app has read it.
+
+        Some apps (Electron/Chromium) read the clipboard asynchronously, so
+        restoring immediately can make them paste the OLD contents.  We wait,
+        and only restore if the clipboard still holds our text — if the user
+        (or another dictation) has copied something since, leave it alone.
+        """
+        def _restore():
+            try:
+                if pyperclip.paste() == pasted_text:
+                    pyperclip.copy(old_clipboard)
+            except Exception as e:
+                print(f"[TextInjector] Could not restore clipboard: {e}")
+
+        t = threading.Timer(delay, _restore)
+        t.daemon = True
+        t.start()
 
     def press_key(self, key_name: str):
         """Press special keys"""
