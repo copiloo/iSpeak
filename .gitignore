@@ -39,6 +39,7 @@ env/
 
 # Whisper models (large files - downloaded automatically)
 ispeak/models/
+/models/
 
 # PyInstaller
 *.spec
